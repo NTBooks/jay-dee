@@ -1,0 +1,14 @@
+{
+  "name": "Jay Dee Radio",
+  "short_name": "Jay Dee",
+  "description": "Your music library as a radio station with an AI DJ",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c0d10",
+  "theme_color": "#0c0d10",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

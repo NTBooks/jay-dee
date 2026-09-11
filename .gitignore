@@ -1,0 +1,19 @@
+node_modules/
+.env
+data/*.sqlite
+data/*.sqlite-*
+data/packets/
+data/results/
+data/tts/
+data/models/
+data/art/
+data/reports/
+public/vendor/
+*.log
+
+# personal: taste doctrine and hand-off notes stay local (templates live in export-skills/templates)
+data/taste/profile.md
+data/taste/vetoes.json
+data/taste/pronunciations.json
+RESUME.md
+jaydee-data.tar.gz

@@ -1,0 +1,12 @@
+{
+  "_comment": "Applied to DJ text right before the voice renders it (never shown on screen). Keys are case-insensitive regexes (word boundaries added); values may use Kokoro/Misaki phoneme markup [word](/phonemes/) or plain respellings. Add band names the voice mangles.",
+  "rules": [
+    { "match": "wind[- ]down", "say": "[wind](/wˈaɪnd/) down", "why": "heteronym: wind (verb)" },
+    { "match": "wind[- ]up", "say": "[wind](/wˈaɪnd/) up" },
+    { "match": "live (album|show|version|recording|set|at|from|in|on stage|take|cut|performance|record)", "say": "[live](/lˈaɪv/) $1" },
+    { "match": "bass", "say": "[bass](/bˈeɪs/)", "why": "the instrument" },
+    { "match": "lead (single|singer|guitar|guitarist|vocal|vocalist|track|off)", "say": "[lead](/lˈiːd/) $1" },
+    { "match": "(a|the|this|that|their|his|her|new|debut|latest|first|second|third|last) record", "say": "$1 [record](/ɹˈɛkɚd/)" },
+    { "match": "records", "say": "[records](/ɹˈɛkɚdz/)" }
+  ]
+}

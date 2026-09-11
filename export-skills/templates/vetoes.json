@@ -1,0 +1,6 @@
+{
+  "_comment": "Artists the DJ must never play (weight 0) or should down-weight (0.3). Matched on a normalized name. Apply with: npm run dj -- vetoes --apply",
+  "vetoes": [
+    { "name": "Example Band", "weight": 0, "reason": "replace me" }
+  ]
+}

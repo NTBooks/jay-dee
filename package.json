@@ -1,0 +1,26 @@
+{
+  "name": "jaydee",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Jellyfin music catalog, research corpus, vector search and AI radio DJ",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs",
+    "sync": "node scripts/sync.mjs",
+    "identify": "node scripts/identify.mjs",
+    "research": "node scripts/research.mjs",
+    "embed": "node scripts/embed.mjs",
+    "dj": "node scripts/dj.mjs",
+    "art": "node scripts/art.mjs",
+    "serve": "node scripts/serve.mjs",
+    "pack": "node scripts/pack.mjs"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^4.0.0",
+    "better-sqlite3": "^13.0.0",
+    "dotenv": "^17.0.0",
+    "express": "^5.0.0",
+    "webamp": "^2.0.0"
+  }
+}

@@ -1,0 +1,15 @@
+node_modules
+.git
+.env
+data/*.sqlite
+data/*.sqlite-*
+data/packets
+data/results
+data/tts
+data/models
+data/art
+data/reports
+public/vendor
+export-skills
+*.log
+*.tar.gz

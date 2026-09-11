@@ -1,0 +1,23 @@
+# Coolify / Nixpacks build for the Jay Dee station (Build Pack: Nixpacks).
+# The image only carries the code; everything mutable lives on a volume mounted at /app/data (see DEPLOY.md).
+
+[variables]
+NODE_ENV = "production"
+NIXPACKS_NODE_VERSION = "24"
+# native modules (better-sqlite3, onnxruntime-node) ship prebuilt binaries; keep the toolchain for the fallback build
+NPM_CONFIG_UPDATE_NOTIFIER = "false"
+
+[phases.setup]
+# "..." keeps the Node provider's defaults (node, npm) and appends what a from-source native build would need
+nixPkgs = ["...", "python3", "gcc", "gnumake"]
+aptPkgs = ["ca-certificates"]
+
+[phases.install]
+cmds = ["npm ci --omit=dev --no-audit --no-fund"]
+
+[phases.build]
+# nothing to compile: the player is static files and Webamp is served straight from node_modules
+cmds = ["node --check scripts/serve.mjs", "mkdir -p data"]
+
+[start]
+cmd = "node scripts/serve.mjs"

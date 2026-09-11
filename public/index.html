@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0c0d10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jay Dee">
+<title>Jay Dee Radio</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body data-mode="radio">
+<header id="top">
+  <div class="brand" id="brand"><b id="brandName">JAY DEE</b> <span id="brandSub">radio</span></div>
+  <form id="themeForm" autocomplete="off">
+    <input id="themeInput" type="text" enterkeyhint="go" placeholder="Ask the DJ for a theme… e.g. rainy afternoon vaporwave with a Celtic detour" />
+    <button type="submit" id="goBtn">Go</button>
+  </form>
+  <div class="modes">
+    <button data-mode="radio" class="mode active">Radio</button>
+    <button data-mode="mc" class="mode">TV</button>
+  </div>
+  <div id="status" class="status">idle</div>
+  <div id="cost" class="cost" title="LLM spend via OpenRouter (Kokoro and Jellyfin are free). Click for details."><span class="costShow">$0.000</span><span class="costDay">today $0.00</span></div>
+</header>
+
+<main>
+  <div id="costPanel" class="costPanel" hidden>
+    <div class="costRow"><span>This show</span><b id="costShowV">$0.000</b><i id="costShowC"></i></div>
+    <div class="costRow"><span>Today</span><b id="costDayV">$0.00</b><i id="costDayC"></i></div>
+    <div class="costRow"><span>This key, all time</span><b id="costAllV">$0.00</b><i id="costAllC"></i></div>
+    <div class="costRow"><span>Last call</span><b id="costLastV"></b><i id="costLastC"></i></div>
+    <div class="costNote">Today / all-time come from OpenRouter itself and include everything billed to this key. "This show" is the app's own per-call log (research subagents run in Claude Code, not here). Models: <code>.env</code> OPENROUTER_MODEL / OPENROUTER_FAST_MODEL. Breakdown: <code>npm run dj -- usage</code></div>
+  </div>
+
+  <div id="booth" class="booth" hidden>
+    <div class="boothHead"><span class="boothTitle">DJ booth</span><span id="boothElapsed" class="boothElapsed"></span><button id="boothClose" class="boothClose" title="hide">×</button></div>
+    <ol id="boothSteps" class="boothSteps"></ol>
+  </div>
+
+  <!-- Radio Mode: Webamp + queue panel -->
+  <section id="radio" class="view">
+    <div id="radioPane">
+      <div class="radioArt" id="radioArtA"></div>
+      <div class="radioArt" id="radioArtB"></div>
+      <canvas id="radioViz"></canvas>
+      <div class="radioVignette"></div>
+      <div id="winamp"></div>
+    </div>
+    <aside id="queuePanel">
+      <button id="takeover" class="takeover" hidden>Another player is driving this show. Take over here</button>
+      <!-- phone transport: Winamp's buttons are too small for thumbs; these drive the same engine -->
+      <div id="radioBar" class="radioBar">
+        <button id="rPrev" class="ctl sm" title="Previous" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M18 5l-9 7 9 7zM5 5h3v14H5z"/></svg></button>
+        <button id="rPlay" class="ctl sm" title="Play" aria-label="Play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+        <button id="rPause" class="ctl sm" title="Pause" aria-label="Pause" hidden><svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+        <button id="rNext" class="ctl sm" title="Next" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M6 5l9 7-9 7zM16 5h3v14h-3z"/></svg></button>
+      </div>
+      <div class="panelHead">Now playing</div>
+      <div id="nowCard" class="nowCard"><div class="art"></div><div class="meta"><div class="t">Nothing yet</div><div class="a">Type a theme and press Go, then hit play on Winamp.</div><div class="fbRow"><button id="rfbUp" class="fbMini" title="Play more like this" disabled>&#128077;</button><button id="rfbDown" class="fbMini" title="Never again (double-click: block the artist)" disabled>&#128078;</button></div></div></div>
+      <div class="panelHead">Saved sets <button id="saveSet" class="mini" title="Save the current show's tracks for later">Save this set</button></div>
+      <ol id="savedSets" class="list sets"></ol>
+      <div class="panelHead">Up next</div>
+      <ol id="upNext" class="list"></ol>
+      <div class="panelHead">Previously</div>
+      <ol id="history" class="list dim"></ol>
+      <div class="panelHead">Call in</div>
+      <form id="callinForm" class="callin" autocomplete="off">
+        <textarea id="callinInput" rows="2" placeholder="Talk to Jay Dee… e.g. “more of that Celtic energy”, “nothing after 1999”, “skip the vaporwave, give me guitars”"></textarea>
+        <div class="callinRow"><span id="callinStatus" class="callinStatus"></span><button type="submit" id="callinBtn">Call in</button></div>
+      </form>
+      <div class="panelHead">DJ transcript</div>
+      <div id="transcript" class="transcript"></div>
+    </aside>
+  </section>
+
+  <!-- TV mode: full-bleed art + factoids -->
+  <section id="mc" class="view" hidden>
+    <div class="bg" id="mcBgA"></div>
+    <div class="bg" id="mcBgB"></div>
+    <div class="shade"></div>
+    <div class="mcIdle" id="mcIdle">
+      <div class="dvd" id="dvdLogo"><span class="dvdCall">W·LLM</span><span class="dvdSub">JAY DEE</span></div>
+      <div class="mcIdleHint" id="mcIdleHint"></div>
+    </div>
+    <div class="mcCorner" id="mcCorner" hidden>
+      <div class="mcCornerHead"><span class="mcCornerLogo">W·LLM</span><span id="mcCornerKind">DID YOU KNOW</span></div>
+      <div class="mcCornerText" id="mcCornerText"></div>
+    </div>
+    <div class="mcStage">
+      <img id="mcCover" class="cover" alt="" />
+      <div class="mcText">
+        <div class="mcEyebrow" id="mcEyebrow">JAY DEE · TV</div>
+        <div class="mcTitle" id="mcTitle"></div>
+        <div class="mcArtist" id="mcArtist"></div>
+        <div class="mcAlbum" id="mcAlbum"></div>
+      </div>
+    </div>
+    <div class="lowerThird">
+      <div class="factoid" id="factoid"></div>
+      <div class="upNextLine" id="mcUpNext"></div>
+    </div>
+    <div class="playOverlay" id="mcPlayOverlay" hidden>
+      <button id="mcPlayBig" aria-label="Play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+      <div class="playHint" id="mcPlayHint">Press play</div>
+    </div>
+    <label class="mcOpt" title="The DJ picks whole albums you own and plays them front to back"><input type="checkbox" id="albumMode"> Album mode</label>
+    <div class="mcControls">
+      <button id="fbUp" class="ctl fb" title="Play more like this" aria-label="Thumbs up" hidden><svg viewBox="0 0 24 24"><path d="M2 20h4V9H2v11zm20-10c0-1.1-.9-2-2-2h-6.3l1-4.6v-.3c0-.4-.2-.8-.4-1.1L13.2 1 6.6 7.6C6.2 8 6 8.5 6 9v9c0 1.1.9 2 2 2h9c.8 0 1.5-.5 1.8-1.2l3-7.1c.1-.2.2-.5.2-.7v-1z"/></svg></button>
+      <button id="fbDown" class="ctl fb" title="Never play this again (double-click: block the artist)" aria-label="Thumbs down" hidden><svg class="thumb" viewBox="0 0 24 24"><path d="M22 4h-4v11h4V4zM2 14c0 1.1.9 2 2 2h6.3l-1 4.6v.3c0 .4.2.8.4 1.1l1.1 1 6.6-6.6c.4-.4.6-.9.6-1.4V6c0-1.1-.9-2-2-2H7c-.8 0-1.5.5-1.8 1.2l-3 7.1c-.1.2-.2.5-.2.7v1z"/></svg><svg class="skullIcon" viewBox="0 0 24 24"><path d="M12 2C7 2 3 5.8 3 10.5c0 2.6 1.3 4.9 3.3 6.4V20a2 2 0 002 2h7.4a2 2 0 002-2v-3.1c2-1.5 3.3-3.8 3.3-6.4C21 5.8 17 2 12 2zm-3.5 11a2 2 0 110-4 2 2 0 010 4zm7 0a2 2 0 110-4 2 2 0 010 4zM10 17h4l-2 2.5L10 17z"/></svg></button>
+      <button id="mcStart" class="ctl" title="Play (P)" aria-label="Play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>
+      <button id="mcPause" class="ctl" title="Pause (Space)" aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+      <button id="mcSkip" class="ctl" title="Next (N)" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M6 5l9 7-9 7zM16 5h3v14h-3z"/></svg></button>
+      <button id="mcSkipAlbum" class="ctl" title="Skip the rest of this album" aria-label="Skip album" hidden><svg viewBox="0 0 24 24"><path d="M2 5l7 7-7 7zM9.5 5l7 7-7 7zM18 5h3v14h-3z"/></svg></button>
+      <button id="mcStop" class="ctl stop" title="Stop the show" aria-label="Stop"><svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg></button>
+    </div>
+  </section>
+</main>
+
+<script src="/vendor/webamp/webamp.bundle.min.js"></script>
+<script src="/app.js"></script>
+<script src="/viz.js"></script>
+<script src="/radio.js"></script>
+<script src="/musicchoice.js"></script>
+<script>JayDee.boot();</script>
+</body>
+</html>
