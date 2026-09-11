@@ -10,6 +10,7 @@ You are guiding a person through setting up their own Jay Dee station. Be conver
 ## 0. Ground rules to explain up front (two sentences each)
 - Their ID3 tags will NOT be trusted; the system identifies everything against MusicBrainz and researches it. That is why the first identification pass takes a while.
 - The station is one shared show; whoever presses Go changes what everyone hears.
+- **What it costs.** Listening is pennies (OpenRouter, hard daily cap). The big cost is up front and paid in *Claude usage*: every artist and album gets a subagent (Sonnet with a small web budget for their most-played acts, Haiku from a packet for the long tail, five per agent). A couple of thousand artists is several hundred agent runs against their plan's limits. Frame it the way it is designed: it runs unattended through a conductor agent, stops cleanly at a usage limit, resumes from the database, and never redoes anything, so it belongs in the hours their allowance would otherwise expire unused. Their heaviest-played artists come first, so the DJ is good long before the queue is empty. Ask which plan they are on and agree a pace (e.g. "one conductor run each night") before starting step 6.
 
 ## 1. Prerequisites (check, do not assume)
 ```bash
@@ -71,5 +72,8 @@ Open http://localhost:3131. Ask for a theme in their own words, press Go, and st
 ## 8. What to leave them with
 - The five operating skills and when to use each (sync after adding music; identify after sync; research as an ongoing background hobby; embed after research; dj to listen).
 - `npm run dj -- usage` and the header cost tracker.
-- `data/taste/profile.md` is theirs to edit; `data/taste/vetoes.json` for hard bans; `data/taste/pronunciations.json` for words the voice mangles.
+- `data/taste/profile.md` is theirs to edit; `data/taste/vetoes.json` for hard bans; `data/taste/pronunciations.json` for words the voice mangles. All three are gitignored: they must be backed up with the database (`npm run pack` bundles them).
 - Everything is resumable; nothing needs to finish in one sitting.
+
+## 9. Optional: the station on a server (Coolify)
+Only the station moves to the server; sync, identify, research and embed stay on the workstation because research needs Claude Code. Walk them through `DEPLOY.md`: `npm run pack` to bundle the database, taste files, voice cache and art; a Coolify app from the repo with Build Pack Nixpacks (the repo carries `nixpacks.toml`), port 3131, a volume at `/app/data`, the env vars from `.env` (Jellyfin and Kokoro URLs must resolve from inside the container), and `STATION_PASSWORD` set before any public domain (it gates OpenRouter spend). Health check `/healthz`. Re-run `pack` and re-upload whenever more research has landed.

@@ -19,6 +19,15 @@ npm run research -- ingest --all
 
 Prerequisite: identification should be done for what you research (`npm run identify -- status` shows `unprocessed=0`); packets are far richer afterwards. Research order: **artists -> derive -> albums -> notable tracks**.
 
+## Budget and pacing (say this to a new user before the first batch)
+
+Research is the one expensive stage, and it is paid in Claude subscription usage: one agent per deep artist, one per five light artists or albums. A couple of thousand artists is several hundred agent runs. Treat it as a way to use allowance that would otherwise go unused, not as a job to finish:
+
+- Run it through the conductor (below) in idle hours. It stops on a usage-limit message and reports the reset time; run it again after the reset. Nothing is lost or redone because state is in the database.
+- Deep tier first (the acts with the most tracks), so the DJ gets good early. The light tier and albums are the long tail and can trickle in over weeks.
+- Never switch research to OpenRouter to go faster without the user asking; the bulk mode is locked behind `OPENROUTER_ALLOW_BULK=yes` because it spends money.
+- Report progress as counts from `status`, never as file contents, so the main session stays small.
+
 ## Tiers (decided Sept 2026 to keep token spend sane)
 
 | tier | who | agent model | web | per agent |

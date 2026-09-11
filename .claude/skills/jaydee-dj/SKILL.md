@@ -38,6 +38,9 @@ Voice/speed come from `.env` (`DJ_VOICE`, `DJ_VOICE_SPEED`); `curl http://localh
 ## Vetoes and taste
 `data/taste/vetoes.json` (weight 0 = never play, 0.3 = down-weight). Apply with `npm run dj -- vetoes --apply`. The full taste profile at `TASTE_PROFILE_PATH` is the DJ's system prompt; edit it there, not here.
 
+## Phones and servers
+The same page works on phones: TV mode is the default there, Radio mode keeps the equalizer closed and adds a thumb transport bar, and lock-screen controls come from the Media Session API. For a hosted station follow `DEPLOY.md` (Coolify, `nixpacks.toml`, volume at `/app/data`, `STATION_PASSWORD` for HTTP Basic auth, `/healthz`). `npm run pack` bundles the data the server needs.
+
 ## Useful endpoints
 `GET /api/station/state`, `GET /api/station/queue`, `POST /api/dj/theme {theme,length}`, `POST /api/station/stop`, `GET /api/search?q=...&type=track`, `GET /api/factoids/:trackId`, `GET /api/stats`, `GET /stream/:trackId` (Range-capable proxy), `GET /art/album|artist|track/:id`, `GET /tts/:hash`.
 

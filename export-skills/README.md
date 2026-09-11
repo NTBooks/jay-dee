@@ -1,8 +1,14 @@
 # Jay Dee: portable skills
 
-Everything an LLM assistant (Claude Code or similar) needs to set up and run Jay Dee for someone with a completely different Jellyfin server, music taste and hardware.
+The skills that run Jay Dee live in `.claude/skills/` and load automatically when the repository is opened in
+Claude Code. This folder is a copy of them plus the starter templates, for people who want the skills somewhere
+else: in `~/.claude/skills/` so they work from any folder, or adapted for another assistant.
 
-Jay Dee is a personal radio station built on a Jellyfin music library: the catalog is mirrored into SQLite, every artist/album/track is identified against MusicBrainz (ID3 tags are treated as untrusted hints), researched, embedded for semantic search, and an AI DJ builds themed sets with a synthesized voice, played in a browser with a Winamp-style mode and a "TV mode" art-and-facts mode.
+Jay Dee is a personal radio station built on a Jellyfin music library: the catalog is mirrored into SQLite,
+every artist/album/track is identified against MusicBrainz (ID3 tags are treated as untrusted hints),
+researched, embedded for semantic search, and an AI DJ builds themed sets with a synthesized voice, played in a
+browser with a Winamp-style mode and a "TV mode" art-and-facts mode. The top-level `README.md` explains the
+project and what it costs; `DEPLOY.md` covers running the station on Coolify.
 
 ## What is in here
 
@@ -26,20 +32,23 @@ export-skills/
 
 ## Install
 
-1. Get the Jay Dee code (the repository this folder ships in). Requires Node 22+ and a Jellyfin server you have an API key for.
-2. Copy `skills/*` into the project's `.claude/skills/` (Claude Code picks them up per project), or into `~/.claude/skills/` to have them everywhere.
-3. Start a Claude Code session in the project folder and say: **"set up Jay Dee for me"**. The `jaydee-setup` skill takes it from there: it checks prerequisites, walks through `.env`, interviews the user for their taste profile, picks libraries, runs the first sync and identification, researches a first handful of artists, builds the index, and starts the first show.
+1. Clone the repository (Node 22+, a Jellyfin server you have an API key for).
+2. Nothing to copy if you use Claude Code in the project folder. Otherwise copy `skills/*` into
+   `~/.claude/skills/`, or feed the SKILL.md files to whichever assistant you drive the CLI with.
+3. Copy the templates into `data/taste/` (they are gitignored there: the taste profile is personal) and start a
+   session with **"set up Jay Dee for me"**. The `jaydee-setup` skill takes it from there.
 
 ## Hard requirements and free alternatives
 
 | Need | Default | Alternatives |
 |---|---|---|
 | Jellyfin | any 10.8+ with an API key | (required) |
-| LLM for the DJ | OpenRouter key, gpt-5-mini / gpt-5-nano (fractions of a cent per set) | any model on OpenRouter; the code disables hidden reasoning where allowed |
+| LLM for the DJ | OpenRouter key, gpt-5-mini / gpt-5-nano (fractions of a cent per set, hard daily cap) | any model on OpenRouter; the code disables hidden reasoning where allowed |
 | Voice | Kokoro-FastAPI running anywhere on the LAN (free, CPU is fine) | OpenAI TTS via `KOKORO_URL=https://api.openai.com`, `TTS_API_KEY`, `TTS_MODEL=gpt-4o-mini-tts`, `DJ_VOICE=onyx`; any other OpenAI-compatible speech server |
 | Embeddings | local `Xenova/bge-small-en-v1.5` via transformers.js (downloads ~130 MB once) | `EMBED_PROVIDER=openrouter` |
-| Research | Claude Code subagents with web search (the operator's own Claude usage) | `npm run research -- bulk` through OpenRouter for cheaper drafts |
+| Research | Claude Code subagents (the operator's own Claude subscription usage; the big up-front cost, resumable, runs unattended) | `npm run research -- bulk` through OpenRouter for cheaper drafts, locked behind an env flag |
 | MusicBrainz | free, 1 request/second, needs a descriptive User-Agent | (required for identification) |
+| Hosting the station | your workstation (`npm run serve`) | Coolify with the repo's `nixpacks.toml` (see `DEPLOY.md`) |
 
 ## Principles the skills enforce
 
@@ -48,3 +57,4 @@ export-skills/
 - **State lives in the database.** Every stage is resumable; sessions start by running a `status` command.
 - **One shared show.** The station is a single live queue; one browser drives it and others can take over.
 - **The taste profile is the product.** A generic DJ is boring; the `jaydee-taste` interview is where a new user's station starts to sound like them.
+- **Spend is guarded.** Research never runs on OpenRouter unless the user unlocks it; the DJ has a hard daily cap.
