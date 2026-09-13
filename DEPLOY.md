@@ -28,7 +28,15 @@ workstation database over the server one loses those. If that matters, save sets
 1. **New resource → Public/Private repository**, pick this repo and branch `main`.
 2. **Build Pack: Nixpacks.** `nixpacks.toml` in the repo root sets Node 24, `npm ci --omit=dev` and
    `node scripts/serve.mjs`; no build step. **Ports Exposes: 3131.**
-3. **Storage → Add volume**: destination path `/app/data` (name it `jaydee-data`). Everything mutable lives there.
+3. **Storages → Volumes → Add**: **Destination Path `/app/data`**. The volume name does not matter (Coolify
+   generates one); leave Source Path empty so Docker manages it. Everything mutable lives there: the catalog
+   database, the voice cache, the embedding model, cached art, taste files and the databases restores set aside.
+   `nixpacks.toml` pins `DATA_DIR=/app/data` so this path is not a guess.
+
+   Miss this and nothing appears wrong — the station runs, publishing works, playback works — until the next
+   redeploy throws the catalog away. So the app checks: if it is in a container and `DATA_DIR` is not a mount
+   point, it prints a boxed warning at startup and the Catalog panel says so, on the server and to any workstation
+   publishing to it.
 4. **Environment variables** (all runtime, none are build-time):
 
    ```

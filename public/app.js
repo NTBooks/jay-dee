@@ -140,6 +140,9 @@ window.JayDee = (() => {
     const info = await api.dbInfo();
     dbUi.counts.textContent = countLine(info.counts);
     dbUi.file.textContent = info.file ? `${mb(info.file.bytes)}, updated ${new Date(info.file.modified).toLocaleString()}` : 'missing';
+    const eph = info.storage && info.storage.persistent === false;
+    dbUi.storage.hidden = !eph;
+    if (eph) dbUi.storage.textContent = `${info.storage.dir} is not a mounted volume: this station's data is thrown away on the next redeploy. Add a volume with that destination path.`;
     dbUi.restore.title = info.restore_enabled ? '' : 'Set STATION_PASSWORD (or use the station from localhost) to enable restore';
     if (!info.restore_enabled) { dbUi.msg.textContent = 'Restore is disabled until STATION_PASSWORD is set, so a public URL cannot be used to overwrite your catalog.'; dbUi.msg.className = 'dbMsg warn'; }
     dbUi.backups.innerHTML = '';
@@ -225,6 +228,10 @@ window.JayDee = (() => {
     dbUi.remoteUrl.textContent = rem.url || '—';
     dbUi.remoteCounts.textContent = rem.error ? rem.error : (rem.counts ? countLine(rem.counts) : '…');
     dbUi.remoteCounts.className = rem.error ? 'warnText' : '';
+    // The mistake worth catching before a publish: the server has no volume, so whatever we send dies on redeploy.
+    const eph = rem.storage && rem.storage.persistent === false;
+    dbUi.remoteStorage.hidden = !eph;
+    if (eph) dbUi.remoteStorage.textContent = `Heads up: ${rem.storage.dir} on the server is not a mounted volume, so anything published there is lost on the next redeploy. Add a volume with that destination path first.`;
 
     const j = s.job;
     const running = j && j.state === 'running';
@@ -272,6 +279,7 @@ window.JayDee = (() => {
       panel: id('dbPanel'), counts: id('dbCounts'), file: id('dbFile'), picked: id('dbPicked'), check: id('dbCheck'),
       bar: id('dbBar'), barFill: id('dbBarFill'), barText: id('dbBarText'), restore: id('dbRestore'), msg: id('dbMsg'),
       backups: id('dbBackups'), fileInput: id('dbFileInput'), drop: id('dbDrop'),
+      storage: id('dbStorage'), remoteStorage: id('dbRemoteStorage'),
       publish: id('dbPublish'), remoteUrl: id('dbRemoteUrl'), remoteCounts: id('dbRemoteCounts'),
       pubBar: id('dbPubBar'), pubBarFill: id('dbPubBarFill'), pubBarText: id('dbPubBarText'),
       publishBtn: id('dbPublishBtn'), pubMsg: id('dbPubMsg'),

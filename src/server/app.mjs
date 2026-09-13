@@ -10,6 +10,7 @@ import { stationRoutes } from './routes/station.mjs';
 import { streamRoutes } from './routes/stream.mjs';
 import { adminRoutes } from './routes/admin.mjs';
 import { log } from '../util/log.mjs';
+import { warnIfEphemeral } from '../util/storage.mjs';
 
 // HTTP Basic auth for every route except the health check. Browsers cache the credentials per origin, so the
 // <audio> element, art and API calls all pass once the page has been unlocked; lock-screen controls keep working.
@@ -25,6 +26,7 @@ function basicAuth({ user, password }) {
 }
 
 export function createApp() {
+  warnIfEphemeral(); // says so loudly when a deployment is missing its volume
   openDb();
   // Routes and the Station hold the live-handle proxy, not the connection itself, so /api/admin/restore can swap
   // the file underneath them without leaving anyone holding a closed database.

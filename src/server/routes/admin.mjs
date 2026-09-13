@@ -9,6 +9,7 @@ import { pipeline } from 'node:stream/promises';
 import { config } from '../../config.mjs';
 import { inspect, restoreFrom, listBackups, snapshot, stagingDir, backupsDir, summarize, statOf } from '../../db/restore.mjs';
 import { openDb } from '../../db/open.mjs';
+import { describeDataDir } from '../../util/storage.mjs';
 import { startPublish, publishState, remoteStatus, isConfigured } from '../../db/publish.mjs';
 import { log } from '../../util/log.mjs';
 
@@ -33,6 +34,7 @@ export function adminRoutes({ station }) {
       path: config.dbPath,
       file: statOf(config.dbPath),
       counts: summarize(openDb()),
+      storage: describeDataDir(),
       backups: listBackups(),
       restore_enabled: Boolean(config.station.password) || isLoopback(req),
       protected: Boolean(config.station.password),

@@ -4,6 +4,11 @@
 [variables]
 NODE_ENV = "production"
 NIXPACKS_NODE_VERSION = "24"
+# Everything mutable lives here: the catalog database, the voice cache, the embedding model, art, taste files and
+# the databases that restores set aside. Mount a persistent volume at this exact path (Coolify: Storages -> Volumes,
+# Destination Path /app/data; the volume's name does not matter). Without it the station still runs, but a redeploy
+# throws the catalog away — the app logs a loud warning at startup when this directory is not a mount point.
+DATA_DIR = "/app/data"
 # native modules (better-sqlite3, onnxruntime-node) ship prebuilt binaries; keep the toolchain for the fallback build
 NPM_CONFIG_UPDATE_NOTIFIER = "false"
 
