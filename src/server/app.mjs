@@ -3,11 +3,12 @@ import fs from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
 import express from 'express';
 import { config } from '../config.mjs';
-import { openDb } from '../db/open.mjs';
+import { openDb, liveDb } from '../db/open.mjs';
 import { Station } from '../dj/station.mjs';
 import { JellyfinClient } from '../jellyfin/client.mjs';
 import { stationRoutes } from './routes/station.mjs';
 import { streamRoutes } from './routes/stream.mjs';
+import { adminRoutes } from './routes/admin.mjs';
 import { log } from '../util/log.mjs';
 
 // HTTP Basic auth for every route except the health check. Browsers cache the credentials per origin, so the
@@ -24,7 +25,10 @@ function basicAuth({ user, password }) {
 }
 
 export function createApp() {
-  const db = openDb();
+  openDb();
+  // Routes and the Station hold the live-handle proxy, not the connection itself, so /api/admin/restore can swap
+  // the file underneath them without leaving anyone holding a closed database.
+  const db = liveDb;
   const station = new Station(db);
   const jf = new JellyfinClient();
   const app = express();
@@ -41,6 +45,7 @@ export function createApp() {
 
   app.use('/', stationRoutes({ db, station }));
   app.use('/', streamRoutes({ db, jf }));
+  app.use('/', adminRoutes({ station }));
 
   const pub = path.join(config.root, 'public');
   // Webamp's bundle is gitignored under public/vendor (a local copy); fall back to the npm package so a fresh

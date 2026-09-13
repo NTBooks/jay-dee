@@ -8,6 +8,8 @@ Jellyfin music catalog -> external research corpus -> vector search -> AI radio 
 - **jaydee-research** — queue-driven research: `packets` -> Claude subagents write JSON -> `ingest`; plus `derive`, `notable`, `bulk`.
 - **jaydee-embed** — `npm run embed -- build|search|stats`.
 - **jaydee-dj** — `npm run serve` (station on http://localhost:3131), `npm run dj -- plan "<theme>"`, `tts-test`, `vetoes`.
+- **restore** — publish a catalog to a deployed station: `npm run restore -- check|apply|push|status|list|snapshot`, or the
+  Catalog panel in the station header. Validates, keeps the replaced database under `data/backups/`, swaps without a restart.
 
 ## Non-negotiable rules
 1. **Tags are hints, never truth.** `tag_*` columns hold Jellyfin/ID3 values (years and genres are frequently wrong in real libraries; an earlier playlist project suffered for trusting them). Everything downstream reads only resolved columns (`year`, `original_year`, `resolved_title`, `resolved_artist`, `release_type`, `genres_json`) and `research`.

@@ -50,7 +50,55 @@ workstation database over the server one loses those. If that matters, save sets
 
 ## 3. Load the data into the volume
 
-Upload `jaydee-data.tar.gz` to the server, then from the Coolify terminal for the app container:
+### One button, from the workstation (no file handling)
+
+Put the server's address and password in the workstation's `.env`:
+
+```
+REMOTE_STATION_URL=https://<your-domain>
+REMOTE_STATION_PASSWORD=<the server's STATION_PASSWORD>
+```
+
+Restart `npm run serve` on the workstation, open its station, click **Catalog**. The panel now shows the server,
+what it is currently serving, and **Publish this catalog**. That takes a consistent snapshot of the local database,
+sends it to the server to be checked, and on success swaps it in — with a progress bar, and nothing to pick, pack
+or paste. This is the normal way to publish after a research session.
+
+### Uploading a database by hand (no container shell)
+
+Open the station, sign in, and click **Catalog** in the header. Choose (or drop in) `data/jaydee.sqlite` from the
+workstation. The file uploads, the server reports what is inside it next to what it is about to replace, and
+**Replace catalog** commits the swap. No restart: the station reopens the new database in place.
+
+What that endpoint does before it touches anything:
+
+- rejects a file that is not SQLite, fails `PRAGMA integrity_check`, lacks the catalog tables, or holds no tracks
+  (so a `.tar.gz`, a half-finished upload or an empty database cannot take the station down);
+- renames the database it is replacing into `data/backups/` and lists it under **Kept databases** with a download
+  link, so a wrong upload is one click from being undone. The three most recent are kept (`RESTORE_KEEP_BACKUPS`);
+- applies `schema.sql` and the additive migrations afterwards, so an older workstation database is brought forward.
+
+**Restore is refused unless `STATION_PASSWORD` is set**, or the request comes from localhost. Everything else on the
+station is only worth a listener's mischief; this one replaces the catalog, so it does not run unauthenticated.
+
+The same thing from the workstation, without opening a browser:
+
+```bash
+npm run restore -- check  data/jaydee.sqlite                      # what is in the file
+npm run restore -- push   data/jaydee.sqlite https://<your-domain> # upload it to the station
+npm run restore -- push   data/jaydee.sqlite https://<your-domain> --dry-run
+```
+
+`push` sends `STATION_USER` / `STATION_PASSWORD` from your `.env` as Basic auth, so the password stays out of your
+shell history. It validates the file locally first and refuses to send hundreds of megabytes of something unusable.
+
+Uploads are capped at 4 GB (`RESTORE_MAX_MB`). On the container itself, `node scripts/restore.mjs apply <file>`
+swaps a file already on the volume, and `snapshot`/`list`/`status` cover the rest.
+
+### The voice cache, art and taste files
+
+Those are not in the database. Use `npm run pack` and unpack the archive into the volume — from the Coolify
+terminal for the app container:
 
 ```bash
 tar -xzf /tmp/jaydee-data.tar.gz -C /app/data
@@ -59,6 +107,17 @@ tar -xzf /tmp/jaydee-data.tar.gz -C /app/data
 (or extract it straight into the volume directory on the host: `docker volume inspect jaydee-data` shows the
 mountpoint). Restart the app. The embedding model (~130 MB) downloads into `/app/data/models` on the first theme
 request; the container needs outbound HTTPS to huggingface.co for that.
+
+### Which way to use
+
+`pack` + untar is the one-shot first load: it carries the voice cache and art as well. After that, when all you
+have done is research more of the library, the Catalog panel is the whole update — and it keeps the database it
+replaced, which untarring over the volume does not.
+
+Either way the server's own DJ tables (sessions, saved sets, feedback, spend log) live in the same file as the
+catalog, so publishing a workstation database replaces them. **Download this one** in the Catalog panel takes a
+consistent copy of what the server is serving before you overwrite it; save sets on the workstation if you want to
+keep them permanently.
 
 ## 4. Check
 
@@ -78,5 +137,8 @@ A GPU build (`kokoro-fastapi-gpu`) renders voice breaks in a second or two inste
 
 - Coolify's Traefik terminates TLS; the app trusts one proxy hop (`trust proxy`).
 - The station is one shared show: everyone on the URL hears and controls the same queue. That is by design.
-- Backups: the volume is the only state. Coolify's scheduled backups can target the volume, or copy
-  `/app/data/jaydee.sqlite` after `PRAGMA wal_checkpoint(TRUNCATE)`.
+- Backups: the volume is the only state. Coolify's scheduled backups can target the volume; for a single file,
+  `GET /api/admin/db/download` (or `npm run restore -- snapshot`) writes a consistent copy with `VACUUM INTO`,
+  which is safe to take while the station is serving — a plain `cp` of a WAL-mode database is not.
+- `data/restore/` is scratch space for uploads in flight and is safe to delete; `data/backups/` holds the
+  databases that restores set aside.

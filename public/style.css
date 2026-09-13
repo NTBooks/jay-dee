@@ -41,6 +41,49 @@ button.primary, #goBtn { background: var(--accent); color: #0b0f0c; border-color
 .costNote { margin-top: 8px; font-size: 11px; color: var(--dim); line-height: 1.4; }
 .costNote code { color: #cfd4dc; }
 
+/* ---------- Catalog database panel (upload / restore) ---------- */
+.dbBtn { margin-left: 10px; padding: 3px 10px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); background: transparent; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.dbBtn:hover { color: #e7ebf2; border-color: #39404b; }
+.dbPanel { position: absolute; z-index: 22; left: 50%; top: 8px; transform: translateX(-50%); width: min(680px, 94vw); max-height: calc(100% - 16px); overflow-y: auto; background: rgba(21,23,28,.98); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.65); padding: 12px 16px 16px; font-size: 13px; }
+.dbPanel[hidden] { display: none !important; }
+.dbHead { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.dbTitle { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.dbRow { display: grid; grid-template-columns: 110px 1fr; gap: 10px; padding: 4px 0; align-items: baseline; }
+.dbRow span { color: var(--dim); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.dbRow b { font-weight: 500; font-variant-numeric: tabular-nums; }
+.dbNote { margin: 10px 0; font-size: 11px; color: var(--dim); line-height: 1.5; }
+.dbNote code { color: #cfd4dc; }
+.dbDrop { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px dashed #2f3742; border-radius: 10px; background: #14171c; }
+.dbDrop.over { border-color: var(--accent2); background: #171c22; }
+.dbDropHint { color: var(--dim); font-size: 12px; }
+.dbPicked { margin-top: 8px; font-size: 12px; color: #cfd4dc; }
+.dbCheck { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: #14181e; border: 1px solid var(--line); font-size: 12px; line-height: 1.6; }
+.dbCheck b { color: var(--dim); font-weight: 500; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.dbBar { position: relative; margin-top: 10px; height: 18px; border-radius: 9px; background: #14171c; border: 1px solid var(--line); overflow: hidden; }
+.dbBar[hidden] { display: none !important; }
+.dbBar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #2a6f97, var(--accent2)); transition: width .15s linear; }
+.dbBar span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; color: #e7ebf2; }
+.dbActions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+/* download links sit next to buttons and should read as buttons, not as raw anchors */
+a.mini { display: inline-block; text-decoration: none; background: #1f232b; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 2px 8px; font-size: 12px; }
+a.mini:hover { border-color: var(--accent); }
+#dbBackups li { gap: 8px; font-size: 12px; }
+#dbBackups .setName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#dbBackups .setMeta { color: var(--dim); flex: none; }
+#dbBackups li.dim { color: var(--dim); }
+.dbPublish { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.dbPublish[hidden] { display: none !important; }
+.warnText { color: #e6cf9a; font-weight: 400; }
+.mini.primary { background: var(--accent); color: #0b0f0c; border-color: var(--accent); font-weight: 600; }
+.mini.primary:not(:disabled):hover { filter: brightness(1.08); }
+.mini.danger { border-color: #5a2b2b; color: #ffb4b4; }
+.mini.danger:not(:disabled):hover { background: #3a1d1d; border-color: #7b3a3a; }
+.mini:disabled { opacity: .45; cursor: not-allowed; }
+.dbMsg { margin-top: 10px; font-size: 12px; line-height: 1.5; min-height: 1em; }
+.dbMsg.error { color: #ff9c9c; }
+.dbMsg.ok { color: #9ae6b4; }
+.dbMsg.warn { color: #e6cf9a; }
+
 /* ---------- DJ booth (planning progress) ---------- */
 .booth { position: absolute; z-index: 20; left: 50%; top: 8px; transform: translateX(-50%); width: min(720px, 94vw); max-height: calc(100% - 16px); overflow-y: auto; background: rgba(21,23,28,.96); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.6); padding: 12px 16px 14px; backdrop-filter: blur(8px); }
 .booth[hidden] { display: none !important; }

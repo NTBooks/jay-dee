@@ -8,6 +8,8 @@ data/tts/
 data/models/
 data/art/
 data/reports/
+data/backups/
+data/restore/
 public/vendor/
 *.log
 

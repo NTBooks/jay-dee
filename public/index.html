@@ -26,6 +26,7 @@
   </div>
   <div id="status" class="status">idle</div>
   <div id="cost" class="cost" title="LLM spend via OpenRouter (Kokoro and Jellyfin are free). Click for details."><span class="costShow">$0.000</span><span class="costDay">today $0.00</span></div>
+  <button id="dbBtn" class="dbBtn" title="Catalog database: upload the one from your workstation, or download this one">Catalog</button>
 </header>
 
 <main>
@@ -35,6 +36,42 @@
     <div class="costRow"><span>This key, all time</span><b id="costAllV">$0.00</b><i id="costAllC"></i></div>
     <div class="costRow"><span>Last call</span><b id="costLastV"></b><i id="costLastC"></i></div>
     <div class="costNote">Today / all-time come from OpenRouter itself and include everything billed to this key. "This show" is the app's own per-call log (research subagents run in Claude Code, not here). Models: <code>.env</code> OPENROUTER_MODEL / OPENROUTER_FAST_MODEL. Breakdown: <code>npm run dj -- usage</code></div>
+  </div>
+
+  <div id="dbPanel" class="dbPanel" hidden>
+    <div class="dbHead"><span class="dbTitle">Catalog database</span><button id="dbClose" class="boothClose" title="hide">×</button></div>
+    <div class="dbNow">
+      <div class="dbRow"><span>Now serving</span><b id="dbCounts">…</b></div>
+      <div class="dbRow"><span>File</span><b id="dbFile">…</b></div>
+    </div>
+    <div id="dbPublish" class="dbPublish" hidden>
+      <div class="panelHead">Publish to the server</div>
+      <div class="dbRow"><span>Server</span><b id="dbRemoteUrl">…</b></div>
+      <div class="dbRow"><span>It has</span><b id="dbRemoteCounts">…</b></div>
+      <div id="dbPubBar" class="dbBar" hidden><i id="dbPubBarFill"></i><span id="dbPubBarText"></span></div>
+      <div class="dbActions"><button id="dbPublishBtn" class="mini primary">Publish this catalog</button></div>
+      <div id="dbPubMsg" class="dbMsg"></div>
+    </div>
+
+    <div class="panelHead">Upload a database</div>
+    <p class="dbNote">Research runs on your workstation; the server only reads the catalog. To publish new research, upload
+      <code>data/jaydee.sqlite</code> from the workstation here. The database being replaced is kept on the server so you can roll back.</p>
+
+    <div id="dbDrop" class="dbDrop">
+      <input id="dbFileInput" type="file" accept=".sqlite,.db,.sqlite3,application/octet-stream" hidden>
+      <button id="dbPick" class="mini">Choose jaydee.sqlite…</button>
+      <span class="dbDropHint">or drop the file here</span>
+    </div>
+    <div id="dbPicked" class="dbPicked" hidden></div>
+    <div id="dbCheck" class="dbCheck" hidden></div>
+    <div id="dbBar" class="dbBar" hidden><i id="dbBarFill"></i><span id="dbBarText"></span></div>
+    <div class="dbActions">
+      <button id="dbRestore" class="mini danger" disabled>Replace catalog</button>
+      <a id="dbDownload" class="mini" href="/api/admin/db/download">Download this one</a>
+    </div>
+    <div id="dbMsg" class="dbMsg"></div>
+    <div class="panelHead">Kept databases</div>
+    <ol id="dbBackups" class="list sets"></ol>
   </div>
 
   <div id="booth" class="booth" hidden>

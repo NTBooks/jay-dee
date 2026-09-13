@@ -52,5 +52,19 @@ export function closeDb() {
   if (_db) { _db.close(); _db = null; }
 }
 
+// A stable stand-in for the connection. Long-lived holders (the Express routes, the Station) keep a reference to
+// this instead of the raw handle, so a restore can close the old database and open a new file underneath them
+// without leaving anyone holding a closed handle. Property access always resolves through openDb().
+export const liveDb = new Proxy(Object.create(null), {
+  get(_t, prop) {
+    const d = openDb();
+    const v = d[prop];
+    return typeof v === 'function' ? v.bind(d) : v;
+  },
+  set(_t, prop, value) { openDb()[prop] = value; return true; },
+  has(_t, prop) { return prop in openDb(); },
+  getPrototypeOf() { return Object.getPrototypeOf(openDb()); },
+});
+
 export const j = (v) => (v === undefined || v === null ? null : JSON.stringify(v));
 export const pj = (s, fallback = null) => { if (s == null) return fallback; try { return JSON.parse(s); } catch { return fallback; } };

@@ -19,6 +19,26 @@ window.JayDee = (() => {
     deleteSet: (id) => fetch(`/api/sets/${id}`, { method: 'DELETE' }).then((r) => r.json()),
     feedback: (track_id, action) => fetch('/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ track_id, action }) }).then((r) => r.json()),
     callIn: (message) => fetch('/api/dj/callin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message }) }).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText); return j; }),
+    dbInfo: () => fetch('/api/admin/db').then((r) => r.json()),
+    publishState: () => fetch('/api/admin/publish').then((r) => r.json()),
+    publish: () => fetch('/api/admin/publish', { method: 'POST' }).then(async (r) => { const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; }),
+    deleteBackup: (name) => fetch(`/api/admin/backups/${encodeURIComponent(name)}`, { method: 'DELETE' }).then((r) => r.json()),
+    // XHR rather than fetch: a few hundred megabytes deserves a progress bar, and fetch cannot report upload progress.
+    uploadDb: (file, { dryRun = false, onProgress = () => {} } = {}) => new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/api/admin/restore${dryRun ? '?dry_run=1' : ''}`);
+      xhr.setRequestHeader('content-type', 'application/octet-stream');
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+      xhr.onload = () => {
+        let j = {};
+        try { j = JSON.parse(xhr.responseText); } catch { /* server said something that was not JSON */ }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(j);
+        else reject(new Error(j.error || `${xhr.status} ${xhr.statusText}`));
+      };
+      xhr.onerror = () => reject(new Error('network error during upload'));
+      xhr.onabort = () => reject(new Error('upload cancelled'));
+      xhr.send(file);
+    }),
   };
 
   const modes = {};
@@ -108,7 +128,173 @@ window.JayDee = (() => {
   window.addEventListener('error', (e) => report(`${e.message} @ ${e.filename}:${e.lineno}`));
   window.addEventListener('unhandledrejection', (e) => report(`unhandled: ${e.reason?.message || e.reason}`));
 
+  // ---- Catalog database panel: upload the workstation's jaydee.sqlite onto this server ----
+  const dbUi = {};
+  let picked = null;      // the File the user chose
+  let checked = false;    // a dry run has passed for that exact file
+
+  const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
+  const countLine = (c) => `${c.tracks.toLocaleString()} tracks · ${c.albums.toLocaleString()} albums · ${c.artists.toLocaleString()} artists · ${c.embeddings.toLocaleString()} embeddings`;
+
+  async function refreshDb() {
+    const info = await api.dbInfo();
+    dbUi.counts.textContent = countLine(info.counts);
+    dbUi.file.textContent = info.file ? `${mb(info.file.bytes)}, updated ${new Date(info.file.modified).toLocaleString()}` : 'missing';
+    dbUi.restore.title = info.restore_enabled ? '' : 'Set STATION_PASSWORD (or use the station from localhost) to enable restore';
+    if (!info.restore_enabled) { dbUi.msg.textContent = 'Restore is disabled until STATION_PASSWORD is set, so a public URL cannot be used to overwrite your catalog.'; dbUi.msg.className = 'dbMsg warn'; }
+    dbUi.backups.innerHTML = '';
+    for (const b of info.backups) {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="setName">${b.name}</span><span class="setMeta">${mb(b.bytes)}</span>`;
+      const dl = document.createElement('a'); dl.className = 'mini'; dl.textContent = 'Download'; dl.href = `/api/admin/backups/${encodeURIComponent(b.name)}`;
+      const del = document.createElement('button'); del.className = 'mini'; del.textContent = 'Delete';
+      del.addEventListener('click', async () => { if (confirm(`Delete ${b.name}? This cannot be undone.`)) { await api.deleteBackup(b.name); refreshDb(); } });
+      li.append(dl, del);
+      dbUi.backups.append(li);
+    }
+    if (!info.backups.length) dbUi.backups.innerHTML = '<li class="dim">none yet — the first restore keeps a copy here</li>';
+  }
+
+  function setPicked(file) {
+    picked = file; checked = false;
+    dbUi.restore.disabled = true;
+    dbUi.check.hidden = true; dbUi.bar.hidden = true; dbUi.msg.textContent = '';
+    dbUi.picked.hidden = !file;
+    if (file) dbUi.picked.textContent = `${file.name} · ${mb(file.size)} — checking…`;
+    if (file) verifyPicked();
+  }
+
+  // Always dry-run first: the file goes up, the server reports what is inside it, and only then does Replace unlock.
+  async function verifyPicked() {
+    const file = picked;
+    dbUi.bar.hidden = false; dbUi.barText.textContent = 'checking file…';
+    try {
+      const out = await api.uploadDb(file, { dryRun: true, onProgress: (p) => setBar(p, 'uploading for check') });
+      if (picked !== file) return; // user changed their mind mid-upload
+      checked = true;
+      dbUi.picked.textContent = `${file.name} · ${mb(file.size)}`;
+      dbUi.check.hidden = false;
+      dbUi.check.innerHTML = `<b>This file holds</b> ${countLine(out.upload)}<br><b>Replacing</b> ${countLine(out.current)}`;
+      dbUi.restore.disabled = false;
+      setBar(1, 'checked — ready to replace');
+    } catch (e) {
+      if (picked !== file) return;
+      dbUi.bar.hidden = true;
+      dbUi.msg.textContent = e.message; dbUi.msg.className = 'dbMsg error';
+      dbUi.picked.textContent = `${file.name} · ${mb(file.size)} — rejected`;
+    }
+  }
+
+  function setBar(frac, label) {
+    dbUi.bar.hidden = false;
+    dbUi.barFill.style.width = `${Math.round(frac * 100)}%`;
+    dbUi.barText.textContent = `${label} ${Math.round(frac * 100)}%`;
+  }
+
+  async function doRestore() {
+    if (!picked || !checked) return;
+    if (!confirm('Replace the catalog this station is serving?\n\nThe current database is kept on the server and listed under "Kept databases", so you can roll back. Any show playing right now will stop.')) return;
+    dbUi.restore.disabled = true;
+    dbUi.msg.textContent = ''; dbUi.msg.className = 'dbMsg';
+    try {
+      const out = await api.uploadDb(picked, { onProgress: (p) => setBar(p, 'uploading') });
+      // clear the picker first: setPicked() resets the message area, which would wipe the result we are about to show
+      setPicked(null);
+      dbUi.fileInput.value = '';
+      setBar(1, 'done');
+      dbUi.msg.className = 'dbMsg ok';
+      dbUi.msg.textContent = `Catalog replaced: ${countLine(out.after)}.${out.backup ? ` Previous database kept as ${out.backup}.` : ''}`;
+      await refreshDb();
+      poll();
+    } catch (e) {
+      dbUi.bar.hidden = true;
+      dbUi.msg.className = 'dbMsg error';
+      dbUi.msg.textContent = e.message;
+      dbUi.restore.disabled = false;
+    }
+  }
+
+  // ---- Publishing: send this machine's catalog to the station it feeds ----
+  let pubTimer = null;
+
+  function renderPublish(s) {
+    const block = dbUi.publish;
+    block.hidden = !s.configured;
+    if (!s.configured) return;
+    const rem = s.remote || {};
+    dbUi.remoteUrl.textContent = rem.url || '—';
+    dbUi.remoteCounts.textContent = rem.error ? rem.error : (rem.counts ? countLine(rem.counts) : '…');
+    dbUi.remoteCounts.className = rem.error ? 'warnText' : '';
+
+    const j = s.job;
+    const running = j && j.state === 'running';
+    dbUi.publishBtn.disabled = running || Boolean(rem.error) || rem.reachable === false;
+    dbUi.publishBtn.textContent = running ? 'Publishing…' : 'Publish this catalog';
+    if (!j) { dbUi.pubBar.hidden = true; return; }
+
+    dbUi.pubBar.hidden = false;
+    const frac = j.total ? j.sent / j.total : 0;
+    dbUi.pubBarFill.style.width = `${Math.round((j.state === 'done' ? 1 : frac) * 100)}%`;
+    dbUi.pubBarText.textContent = j.state === 'done' ? 'published' : `${j.note} ${j.total ? `${Math.round(frac * 100)}%` : ''}`;
+    if (j.state === 'failed') { dbUi.pubMsg.className = 'dbMsg error'; dbUi.pubMsg.textContent = j.error; dbUi.pubBar.hidden = true; }
+    else if (j.state === 'done') {
+      dbUi.pubMsg.className = 'dbMsg ok';
+      const a = j.result?.after;
+      dbUi.pubMsg.textContent = `Server updated: ${a ? `${countLine(a)}.` : ''}${j.result?.backup ? ` Its previous database is kept as ${j.result.backup}.` : ''}`;
+    }
+  }
+
+  async function pollPublish() {
+    try { const s = await api.publishState(); renderPublish(s); if (s.job?.state === 'running') return; } catch { /* panel may be closed */ }
+    clearInterval(pubTimer); pubTimer = null;
+  }
+
+  async function refreshPublish() {
+    try { renderPublish(await api.publishState()); } catch { /* leave the block as it was */ }
+  }
+
+  async function doPublish() {
+    dbUi.pubMsg.textContent = ''; dbUi.pubMsg.className = 'dbMsg';
+    dbUi.publishBtn.disabled = true;
+    try {
+      await api.publish();
+      if (!pubTimer) pubTimer = setInterval(pollPublish, 700);
+      pollPublish();
+    } catch (e) {
+      dbUi.pubMsg.className = 'dbMsg error'; dbUi.pubMsg.textContent = e.message;
+      dbUi.publishBtn.disabled = false;
+    }
+  }
+
+  function wireDbPanel() {
+    const id = (x) => document.getElementById(x);
+    Object.assign(dbUi, {
+      panel: id('dbPanel'), counts: id('dbCounts'), file: id('dbFile'), picked: id('dbPicked'), check: id('dbCheck'),
+      bar: id('dbBar'), barFill: id('dbBarFill'), barText: id('dbBarText'), restore: id('dbRestore'), msg: id('dbMsg'),
+      backups: id('dbBackups'), fileInput: id('dbFileInput'), drop: id('dbDrop'),
+      publish: id('dbPublish'), remoteUrl: id('dbRemoteUrl'), remoteCounts: id('dbRemoteCounts'),
+      pubBar: id('dbPubBar'), pubBarFill: id('dbPubBarFill'), pubBarText: id('dbPubBarText'),
+      publishBtn: id('dbPublishBtn'), pubMsg: id('dbPubMsg'),
+    });
+    id('dbBtn').addEventListener('click', () => {
+      dbUi.panel.hidden = !dbUi.panel.hidden;
+      if (!dbUi.panel.hidden) {
+        refreshDb().catch((e) => { dbUi.msg.textContent = e.message; dbUi.msg.className = 'dbMsg error'; });
+        refreshPublish();
+      }
+    });
+    dbUi.publishBtn.addEventListener('click', doPublish);
+    id('dbClose').addEventListener('click', () => { dbUi.panel.hidden = true; });
+    id('dbPick').addEventListener('click', () => dbUi.fileInput.click());
+    dbUi.fileInput.addEventListener('change', () => setPicked(dbUi.fileInput.files[0] || null));
+    dbUi.restore.addEventListener('click', doRestore);
+    for (const ev of ['dragenter', 'dragover']) dbUi.drop.addEventListener(ev, (e) => { e.preventDefault(); dbUi.drop.classList.add('over'); });
+    for (const ev of ['dragleave', 'drop']) dbUi.drop.addEventListener(ev, (e) => { e.preventDefault(); dbUi.drop.classList.remove('over'); });
+    dbUi.drop.addEventListener('drop', (e) => setPicked(e.dataTransfer.files[0] || null));
+  }
+
   function boot() {
+    wireDbPanel();
     document.getElementById('themeForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const theme = document.getElementById('themeInput').value.trim();

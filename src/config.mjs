@@ -57,6 +57,13 @@ export const config = {
   musicbrainz: {
     userAgent: env('MB_USER_AGENT', 'JayDee/0.1 (personal radio project; https://github.com/)'),
   },
+  // The deployed station this workstation publishes its catalog to. Set REMOTE_STATION_URL and the station's
+  // password and the Catalog panel grows a "Publish" button: no file to pick, no archive, no container shell.
+  remote: {
+    url: env('REMOTE_STATION_URL', '').replace(/\/+$/, ''),
+    user: env('REMOTE_STATION_USER', env('STATION_USER', 'dj')),
+    password: env('REMOTE_STATION_PASSWORD', ''),
+  },
   lastfmKey: env('LASTFM_API_KEY', ''),
   discogsToken: env('DISCOGS_TOKEN', ''),
   tasteProfilePath: resolveFromRoot(env('TASTE_PROFILE_PATH', path.join(DATA_DIR, 'taste', 'profile.md'))),
