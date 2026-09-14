@@ -11,6 +11,7 @@ import { streamRoutes } from './routes/stream.mjs';
 import { adminRoutes } from './routes/admin.mjs';
 import { log } from '../util/log.mjs';
 import { warnIfEphemeral } from '../util/storage.mjs';
+import { pruneVoiceCache } from '../dj/tts.mjs';
 
 // HTTP Basic auth for every route except the health check. Browsers cache the credentials per origin, so the
 // <audio> element, art and API calls all pass once the page has been unlocked; lock-screen controls keep working.
@@ -62,5 +63,7 @@ export function createApp() {
     res.status(500).json({ error: err.message });
   });
   fs.mkdirSync(path.join(config.dataDir, 'tts'), { recursive: true });
+  // Sweep voice left behind by shows that ended before the last restart (or by an older build that never pruned).
+  try { pruneVoiceCache(db, { graceMs: 0 }); } catch (e) { log.warn(`voice cache prune failed: ${e.message}`); }
   return { app, db, station };
 }

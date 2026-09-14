@@ -7,6 +7,7 @@ import { nowIso } from '../util/hash.mjs';
 import { config } from '../config.mjs';
 import { log } from '../util/log.mjs';
 import { costTotals } from '../llm/openrouter.mjs';
+import { pruneVoiceCache } from './tts.mjs';
 
 
 export class Station {
@@ -325,5 +326,7 @@ export class Station {
   endSession(sessionId, reason = 'stopped') {
     this.db.prepare("UPDATE dj_sessions SET status='ended', ended_at=?, error=COALESCE(error, ?) WHERE id=?").run(nowIso(), reason === 'stopped' ? null : reason, sessionId);
     this.db.prepare("UPDATE dj_queue SET status='skipped', reason='session ended' WHERE session_id=? AND status IN ('queued','playing')").run(sessionId);
+    // The show this voice was written for is over, so its breaks are now dead weight on the volume.
+    try { pruneVoiceCache(this.db); } catch (e) { log.warn(`voice cache prune failed: ${e.message}`); }
   }
 }

@@ -32,6 +32,37 @@ export function patterHash(text, voice = config.kokoro.voice, speed = config.kok
   return sha1(`${voice}|${speed}|${speakable(text)}`);
 }
 
+// Voice breaks are written for one show and are dead the moment a new theme replaces it: the words were about
+// those tracks, in that order. Left alone the cache grows for the life of the server, a few hundred KB per break.
+//
+// Only the mp3 goes. The patter row keeps the text, so transcripts of past shows still read, and renderPatter
+// treats a missing file as a cache miss and speaks it again — so deleting too eagerly costs a re-render, nothing
+// worse. Saved sets store track ids only and never reference a voice file, so nothing else can be holding one.
+export function pruneVoiceCache(db, { graceMs = 120_000 } = {}) {
+  if (process.env.TTS_KEEP_ALL === '1') return { removed: 0, freedBytes: 0, skipped: 'TTS_KEEP_ALL=1' };
+  const dir = ttsDir();
+  if (!fs.existsSync(dir)) return { removed: 0, freedBytes: 0 };
+  const keep = new Set(db.prepare(`
+    SELECT DISTINCT q.patter_hash h FROM dj_queue q JOIN dj_sessions s ON s.id = q.session_id
+    WHERE q.patter_hash IS NOT NULL AND s.status IN ('planning','ready','playing','refilling')
+  `).all().map((r) => r.h));
+  const now = Date.now();
+  let removed = 0, freedBytes = 0;
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith('.mp3')) continue;
+    if (keep.has(f.slice(0, -4))) continue;
+    const p = path.join(dir, f);
+    try {
+      const st = fs.statSync(p);
+      if (now - st.mtimeMs < graceMs) continue; // a player may still be fetching one that was just rendered
+      fs.rmSync(p, { force: true });
+      removed++; freedBytes += st.size;
+    } catch { /* vanished under us, or in use on Windows: it will be caught next time */ }
+  }
+  if (removed) log.info(`voice cache: removed ${removed} orphaned break(s), freed ${(freedBytes / 1048576).toFixed(1)} MB`);
+  return { removed, freedBytes };
+}
+
 export async function renderPatter(db, text, { voice = config.kokoro.voice, speed = config.kokoro.speed } = {}) {
   const hash = patterHash(text, voice, speed);
   const spoken = speakable(text);
