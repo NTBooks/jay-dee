@@ -51,6 +51,8 @@ window.JayDee = (() => {
     advance: (itemId, reason, nextItemId, takeover = false, shuffle = false) => fetch('/api/station/advance', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ itemId, reason, nextItemId, clientId, takeover, shuffle }) })
       .then(async (r) => { const j = await r.json(); if (r.status === 409) throw Object.assign(new Error(j.error || 'another player is driving this show'), { controller: true, state: j.state }); return j; }),
     stop: () => fetch('/api/station/stop', { method: 'POST' }).then((r) => r.json()),
+    control: (takeover = false) => fetch('/api/station/control', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId, takeover }) })
+      .then(async (r) => { const j = await r.json(); if (r.status === 409) throw Object.assign(new Error(j.error || 'another player is driving this show'), { controller: true, state: j.state }); return j; }),
     factoids: (trackId) => fetch(`/api/factoids/${trackId}`).then((r) => r.json()),
     skipAlbum: () => fetch('/api/station/skip-album', { method: 'POST' }).then((r) => r.json()),
     sets: () => fetch('/api/sets').then((r) => r.json()),

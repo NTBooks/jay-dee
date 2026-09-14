@@ -101,6 +101,12 @@
   document.getElementById('rfbDown').addEventListener('click', () => { clearTimeout(rDownTimer); rDownTimer = setTimeout(() => { const fb = currentTrackForFb?.feedback || {}; rFeedback(fb.artist_blocked ? 'unblock_artist' : fb.track === 'down' ? 'clear' : 'down'); }, 260); });
   document.getElementById('rfbDown').addEventListener('dblclick', () => { clearTimeout(rDownTimer); rFeedback(currentTrackForFb?.feedback?.artist_blocked ? 'unblock_artist' : 'block_artist'); });
   let passive = false, takeoverNext = false;
+  // Hold the show while playing. The claim goes stale after 90s server-side, and tracks are longer than that, so
+  // without a refresh a second player would find the role free mid-track and start a competing copy.
+  setInterval(() => {
+    if (passive || disposed || !JayDee.engine?.isPlaying()) return;
+    api.control().catch((e) => { if (e.controller) goPassive(e.state); });
+  }, 30_000);
   function goPassive(state) {
     passive = true;
     try { webamp.pause(); } catch {}
@@ -109,6 +115,8 @@
   }
   async function syncPlaylist(state) {
     if (!state?.session || disposed) return;
+    // Someone else holds the show: stop before playing over them, rather than finding out at the next advance.
+    if (!passive && !JayDee.isDriver(state) && JayDee.engine?.isPlaying()) { goPassive(state); return; }
     if (passive) return; // watching only until the user takes over
     try { await syncPlaylistInner(state); } catch (e) { console.error('syncPlaylist failed', e); }
   }
@@ -212,6 +220,11 @@
     ensure: ensureWebamp,
     play: async () => {
       try {
+        // Claim the show before making a sound. Without this a second player runs its own copy of the same queue
+        // until the next advance: two systems play the same track and the same voice break a moment apart, which
+        // in one room comb-filters into something slurred and distorted rather than sounding like two players.
+        try { await api.control(); }
+        catch (e) { if (e.controller) { await ensureWebamp(); goPassive(e.state); return; } }
         await ensureWebamp();
         const st = webamp.store.getState();
         if (!st.playlist.trackOrder.length) { inPlaylist.clear(); playingItem = null; await syncPlaylist(JayDee.getState()); }
@@ -232,7 +245,15 @@
     prune: (queueIds) => removeFromWebamp(queueIds || []),
     // queue item id of the track Webamp currently has loaded (the one source of truth for "what is playing")
     currentItemId: () => { try { const st = webamp.store.getState(); const t = st.playlist.currentTrack != null ? st.tracks[st.playlist.currentTrack] : null; return t ? itemFromUrl(t.url) : null; } catch { return null; } },
-    takeover: () => { passive = false; takeoverNext = true; document.getElementById('takeover').hidden = true; inPlaylist.clear(); playingItem = null; syncPlaylist(JayDee.getState()).catch(console.error); },
+    takeover: () => {
+      passive = false; takeoverNext = true;
+      document.getElementById('takeover').hidden = true;
+      inPlaylist.clear(); playingItem = null;
+      // Take the role now, so the player we are taking it from goes passive on its next poll instead of both
+      // playing until whichever one finishes an item first.
+      api.control(true).catch(() => {});
+      syncPlaylist(JayDee.getState()).catch(console.error);
+    },
   };
 
   modes.radio = {

@@ -63,6 +63,19 @@ export function stationRoutes({ db, station }) {
     res.json(station.setFeedback(track_id, action));
   });
 
+  // Claim the driver role (on play) or refresh it (heartbeat while playing). Does not touch the queue.
+  r.post('/api/station/control', wrap(async (req, res) => {
+    const s = station.current();
+    if (!s) return res.json({ ok: true, controller: null });
+    try {
+      const controller = station.claim(s.id, req.body?.clientId, { takeover: !!req.body?.takeover });
+      res.json({ ok: true, controller });
+    } catch (e) {
+      if (e.controller) return res.status(409).json({ error: e.message, controller: true, state: station.state() });
+      throw e;
+    }
+  }));
+
   r.post('/api/station/advance', wrap(async (req, res) => {
     const s = station.current();
     if (!s) return res.json({ item: null, session: null });

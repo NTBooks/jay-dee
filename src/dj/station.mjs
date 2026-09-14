@@ -124,6 +124,17 @@ export class Station {
     if (stale || takeover || c.clientId === clientId) { this.controller = { sessionId, clientId, seenAt: Date.now() }; return true; }
     return false;
   }
+  // Claim or refresh the driver role without touching the queue. Playback used to announce itself only at the next
+  // advance, i.e. when something finished, so a second player ran its own copy of the show for a whole track before
+  // anyone noticed. Pressing play claims here instead, and the driver refreshes while it plays so the 90s staleness
+  // window cannot hand the show to someone else mid-track.
+  claim(sessionId, clientId, { takeover = false } = {}) {
+    if (!this.claimControl(sessionId, clientId, { takeover })) {
+      throw Object.assign(new Error('another player is driving this show'), { status: 409, controller: true });
+    }
+    return this.controllerInfo(sessionId);
+  }
+
   controllerInfo(sessionId) {
     const c = this.controller;
     if (!c || c.sessionId !== sessionId) return null;
