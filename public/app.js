@@ -1,3 +1,14 @@
+// Signing in through http://user:pass@host/ leaves the credentials in the document's base URL, and Chrome then
+// refuses every app-relative fetch() from that page ("Request cannot be constructed from a URL that includes
+// credentials") — which surfaces as the whole station looking unreachable. location.href hides the credentials, so
+// the page cannot even tell; document.baseURI still carries them. Resolving "/api/..." against the origin instead
+// sidesteps it for every call site in every script, so this runs before any of them.
+(() => {
+  const origin = location.origin;
+  const f = window.fetch.bind(window);
+  window.fetch = (input, init) => f(typeof input === 'string' && input.startsWith('/') ? origin + input : input, init);
+})();
+
 // Shared station client: theme submission, state polling, mode switching. Modes register with JayDee.modes.
 window.JayDee = (() => {
   // Each browser tab identifies itself so only one player drives the shared show; others watch.
@@ -124,7 +135,19 @@ window.JayDee = (() => {
     modes[name]?.enter?.(lastState);
   }
 
-  const report = (msg) => { try { fetch('/api/client-log', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId, msg: String(msg).slice(0, 500), mode: document.body.dataset.mode }) }); } catch {} };
+  // Reporting must never be able to fail in a way that produces another report: a rejected fetch here raises
+  // unhandledrejection, which calls report again. That loop once put 28k errors in a console in a few seconds.
+  let reporting = false;
+  let reportsLeft = 20; // and never flood the server log either
+  const report = (msg) => {
+    if (reporting || reportsLeft <= 0) return;
+    reporting = true; reportsLeft--;
+    try {
+      fetch('/api/client-log', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ clientId, msg: String(msg).slice(0, 500), mode: document.body.dataset.mode }) })
+        .catch(() => {})
+        .finally(() => { reporting = false; });
+    } catch { reporting = false; }
+  };
   window.addEventListener('error', (e) => report(`${e.message} @ ${e.filename}:${e.lineno}`));
   window.addEventListener('unhandledrejection', (e) => report(`unhandled: ${e.reason?.message || e.reason}`));
 
