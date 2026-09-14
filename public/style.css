@@ -255,6 +255,12 @@ body.lowfx .ctl { background: rgba(8,10,14,.92); }
 body.lowfx #radioPane .radioArt { filter: saturate(1.2) brightness(.38) contrast(1.05); transform: scale(1.02); }
 body.lowfx #radioViz { display: none; }
 body.lowfx .cover { animation: none; }
+/* A CSS filter on a full-screen image is another whole-viewport CPU pass per composite, and cross-fading two of
+   them runs that pass twice for the length of the fade. Swap instantly and leave the artwork unfiltered instead. */
+body.lowfx #mc .bg { filter: none; transition: none; }
+body.lowfx #radioPane .radioArt { filter: none; transition: none; transform: none; }
+body.lowfx .mcStage, body.lowfx .lowerThird, body.lowfx .factoid, body.lowfx .mcCorner { transition: none; }
+body.lowfx .cover, body.lowfx .ctl, body.lowfx .mcCorner, body.lowfx .factoid { box-shadow: none; }
 
 /* ---------- tablets and phones in landscape ---------- */
 @media (max-width: 900px) {
