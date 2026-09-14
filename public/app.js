@@ -9,6 +9,35 @@
   window.fetch = (input, init) => f(typeof input === 'string' && input.startsWith('/') ? origin + input : input, init);
 })();
 
+// Low effects: blurs are free on a GPU and ruinous without one. Chrome falls back to software rendering on plenty
+// of machines (no compatible GPU, a driver on the blocklist, --disable-gpu, some VMs and remote sessions), and
+// there every backdrop-filter is a CPU blur on every composite — enough to drop frames in unrelated tabs. Detect
+// that up front and drop the effects; the setting is a plain switch, so a wrong guess either way is one click.
+(() => {
+  const KEY = 'jaydee.lowfx';
+  let saved = null;
+  try { saved = localStorage.getItem(KEY); } catch {}
+  const softwareRendered = () => {
+    try {
+      const gl = document.createElement('canvas').getContext('webgl');
+      if (!gl) return true; // no WebGL at all: assume there is no GPU to lean on
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const r = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+      return /swiftshader|llvmpipe|software|basic render|microsoft basic|mesa offscreen/i.test(r);
+    } catch { return false; }
+  };
+  const on = saved === null ? softwareRendered() : saved === '1';
+  document.documentElement.classList.toggle('lowfx-pending', on); // body may not exist yet
+  window.JayDeeLowFx = {
+    get: () => document.body.classList.contains('lowfx'),
+    set(v) {
+      document.body.classList.toggle('lowfx', !!v);
+      try { localStorage.setItem(KEY, v ? '1' : '0'); } catch {}
+    },
+    auto: saved === null,
+  };
+})();
+
 // Shared station client: theme submission, state polling, mode switching. Modes register with JayDee.modes.
 window.JayDee = (() => {
   // Each browser tab identifies itself so only one player drives the shared show; others watch.
@@ -325,6 +354,16 @@ window.JayDee = (() => {
   }
 
   function boot() {
+    // carry the pre-body decision onto <body>, where the rules hang, and wire the switch
+    if (document.documentElement.classList.contains('lowfx-pending')) document.body.classList.add('lowfx');
+    const fx = document.getElementById('lowFx');
+    if (fx) {
+      fx.checked = document.body.classList.contains('lowfx');
+      fx.addEventListener('change', () => window.JayDeeLowFx.set(fx.checked));
+    }
+    // A hidden tab still composites; stop paying for effects nobody is looking at.
+    const bg = () => document.body.classList.toggle('bgtab', document.hidden);
+    document.addEventListener('visibilitychange', bg); bg();
     wireDbPanel();
     document.getElementById('themeForm').addEventListener('submit', async (e) => {
       e.preventDefault();

@@ -200,6 +200,7 @@ body.hideWinamp #webamp { display: none !important; }
 .mcOpt { position: absolute; z-index: 4; left: 2.5vw; bottom: 2.5vh; display: flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #dfe3ea; background: rgba(8,10,14,.55); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 8px 14px; opacity: .55; transition: opacity .3s; cursor: pointer; user-select: none; }
 #mc:hover .mcOpt, .mcOpt:focus-within { opacity: 1; }
 .mcOpt input { accent-color: var(--accent2); width: 16px; height: 16px; margin: 0; }
+.mcOpt2 { left: auto; right: 2.5vw; bottom: calc(2.5vh + 46px); }
 #mcSkipAlbum[hidden] { display: none !important; }
 #mc:hover .mcControls, .mcControls:focus-within { opacity: 1; }
 .ctl { width: clamp(52px, 5vw, 76px); height: clamp(52px, 5vw, 76px); border-radius: 50%; padding: 0; display: grid; place-items: center; background: rgba(8,10,14,.72); border: 2px solid rgba(255,255,255,.28); color: #f0f2f5; backdrop-filter: blur(6px); box-shadow: 0 10px 30px rgba(0,0,0,.5); }
@@ -229,6 +230,31 @@ body.hideWinamp #webamp { display: none !important; }
 body.paused .cover { animation-play-state: paused; }
 body.paused #mc .bg { transition: none; }
 body.paused .mcIdle.talking .dvd, body.paused .playOverlay button { animation-play-state: paused; }
+
+/* backdrop-filter keeps the GPU holding and re-blurring a copy of everything beneath it, full-screen in TV mode,
+   whether or not anything is moving. That is a poor trade for a paused show or a tab nobody is looking at: it is
+   the one cost here that does not stop on its own, and it shows up as other tabs dropping frames. Swap the blurs
+   for flat translucency, and stop every animation outright, whenever the show is paused or the tab is hidden. */
+body.paused .playOverlay, body.bgtab .playOverlay { backdrop-filter: none; background: rgba(0,0,0,.62); }
+body.paused .factoid, body.bgtab .factoid,
+body.paused .ctl, body.bgtab .ctl,
+body.paused .mcCorner, body.bgtab .mcCorner,
+body.paused .booth, body.bgtab .booth { backdrop-filter: none; }
+body.bgtab *, body.bgtab *::before, body.bgtab *::after { animation-play-state: paused !important; transition: none !important; }
+
+/* Low effects. On a machine where Chrome falls back to software rendering there is no GPU to hand this work to:
+   every blur is rasterised on the CPU, on every composite, and a full-screen one is enough to starve the rest of
+   the browser. Set automatically when software rendering is detected, and available as a switch either way. The
+   station keeps its layout and artwork — it just stops asking for effects this machine cannot afford. */
+body.lowfx .booth, body.lowfx .mcCorner, body.lowfx .playOverlay,
+body.lowfx .factoid, body.lowfx .ctl { backdrop-filter: none !important; }
+body.lowfx .playOverlay { background: rgba(0,0,0,.62); }
+body.lowfx .mcCorner, body.lowfx .factoid { background: rgba(8,10,14,.88); }
+body.lowfx .ctl { background: rgba(8,10,14,.92); }
+/* the radio backdrop is a 34px blur across the whole pane: the single most expensive thing in software rendering */
+body.lowfx #radioPane .radioArt { filter: saturate(1.2) brightness(.38) contrast(1.05); transform: scale(1.02); }
+body.lowfx #radioViz { display: none; }
+body.lowfx .cover { animation: none; }
 
 /* ---------- tablets and phones in landscape ---------- */
 @media (max-width: 900px) {
