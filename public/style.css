@@ -253,7 +253,8 @@ body.lowfx .mcCorner, body.lowfx .factoid { background: rgba(8,10,14,.88); }
 body.lowfx .ctl { background: rgba(8,10,14,.92); }
 /* the radio backdrop is a 34px blur across the whole pane: the single most expensive thing in software rendering */
 body.lowfx #radioPane .radioArt { filter: saturate(1.2) brightness(.38) contrast(1.05); transform: scale(1.02); }
-body.lowfx #radioViz { display: none; }
+/* the visualizer stays (viz.js draws it smaller and slower here); only the full-screen blend goes */
+body.lowfx #radioViz { mix-blend-mode: normal; opacity: .7; }
 body.lowfx .cover { animation: none; }
 /* A CSS filter on a full-screen image is another whole-viewport CPU pass per composite, and cross-fading two of
    them runs that pass twice for the length of the fade. Swap instantly and leave the artwork unfiltered instead. */

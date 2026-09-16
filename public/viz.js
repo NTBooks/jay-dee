@@ -16,10 +16,16 @@ JayDee.viz = (() => {
   const STRIPS = 28;
   const blobs = Array.from({ length: 5 }, (_, i) => ({ fx: 0.09 + i * 0.031, fy: 0.071 + i * 0.027, px: i * 1.7, py: i * 0.9, band: i % 4 }));
 
+  // Low effects (software rendering) keeps the visualizer rather than hiding it, but pays less for it: under half
+  // the pixels, 30 frames a second, and no per-frame hue filter. The canvas is scaled up by CSS, and Geiss is a blur
+  // anyway, so the loss is mostly invisible.
+  const lite = () => document.body.classList.contains('lowfx');
+  let sizedLite = null;
   function resize() {
     if (!canvas) return;
     const r = canvas.parentElement.getBoundingClientRect();
-    const scale = 0.6;
+    sizedLite = lite();
+    const scale = sizedLite ? 0.34 : 0.6;
     canvas.width = Math.max(200, Math.round(r.width * scale));
     canvas.height = Math.max(150, Math.round(r.height * scale));
     off.width = canvas.width; off.height = canvas.height;
@@ -49,12 +55,14 @@ JayDee.viz = (() => {
     if (!running) return;
     // Off screen (hidden tab, or the other mode): nobody would see a glide, so stop dead and spin up from rest on return.
     if (document.hidden || !canvas.offsetParent) { speed = 0; lastNow = null; return; }
+    if (lite() && lastNow != null && now - lastNow < 30) { raf = requestAnimationFrame(frame); return; } // hold to ~30 fps
     const dt = lastNow == null ? 1 / 60 : Math.min(0.05, (now - lastNow) / 1000);
     lastNow = now;
     const want = isPlaying() ? 1 : 0;
     speed += (want - speed) * (1 - Math.exp(-dt / (want > speed ? TAU_UP : TAU_DOWN)));
     if (want === 0 && speed < 0.02) { speed = 0; lastNow = null; return; } // at rest: sleep until kick()
     raf = requestAnimationFrame(frame);
+    if (sizedLite !== lite()) resize(); // the Reduce effects switch was flipped
     const w = canvas.width, h = canvas.height;
     simT += dt * speed;
     const t = simT;
@@ -67,7 +75,7 @@ JayDee.viz = (() => {
     // 1. feedback: previous frame -> wave-warped strips, zoomed + rotated, slight fade + hue drift
     offCtx.globalCompositeOperation = 'source-over';
     offCtx.clearRect(0, 0, w, h);
-    try { offCtx.filter = `hue-rotate(${((0.4 + sp.mid * 2.5) * speed).toFixed(2)}deg)`; } catch {}
+    if (!sizedLite) { try { offCtx.filter = `hue-rotate(${((0.4 + sp.mid * 2.5) * speed).toFixed(2)}deg)`; } catch {} }
     offCtx.drawImage(canvas, 0, 0);
     offCtx.filter = 'none';
     ctx.globalCompositeOperation = 'source-over';
@@ -210,6 +218,9 @@ JayDee.viz = (() => {
     resize();
     window.addEventListener('resize', resize);
     running = true;
+    // Resizing clears the canvas, and at rest nothing is drawn, so entering Radio mode while paused showed an empty
+    // pane. Paused, start in motion and let it glide to a still picture; playing, spin up from rest as usual.
+    speed = isPlaying() ? 0 : 1; lastNow = null;
     kick();
     clearInterval(waker);
     waker = setInterval(kick, 1000);

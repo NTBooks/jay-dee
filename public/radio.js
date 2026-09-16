@@ -298,6 +298,8 @@
   modes.radio = {
     async enter(state) {
       await ensureWebamp();
+      // Switched away while Webamp was still mounting: don't put the Winamp windows and the visualizer over TV mode.
+      if (document.body.dataset.mode !== 'radio') return;
       document.body.classList.remove('hideWinamp');
       positionRoot();
       JayDee.viz.start(document.getElementById('radioViz'), () => { try { return webamp && !disposed ? webamp.media.getAnalyser() : null; } catch { return null; } }, () => JayDee.engine.isPlaying());
