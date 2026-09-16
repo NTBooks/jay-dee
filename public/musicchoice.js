@@ -40,7 +40,8 @@
   const idle = { raf: null, x: 80, y: 80, vx: 2.2, vy: 1.7, on: false, parked: false, hintTimer: null };
   const DVD_COLORS = ['#7fd6a4', '#f5c46b', '#8fb8ff', '#ff8fb1', '#c9a0ff', '#ffd27f', '#7fe3e0'];
   function dvdFrame() {
-    if (!idle.on || document.body.dataset.mode !== 'mc' || document.hidden) { idle.raf = null; return; }
+    // the talking pose only moves while the voice does; paused, it holds still instead of repainting every frame
+    if (!idle.on || document.body.dataset.mode !== 'mc' || document.hidden || (idle.parked && !JayDee.engine?.isPlaying())) { idle.raf = null; return; }
     const stage = document.getElementById('mc').getBoundingClientRect();
     const logo = document.getElementById('dvdLogo');
     const w = stage.width, h = stage.height, lw = logo.offsetWidth, lh = logo.offsetHeight;
@@ -203,6 +204,7 @@
     const playing = engine().isPlaying();
     document.body.classList.toggle('paused', !playing);
     keepAwake(playing);
+    kickIdle();
     document.getElementById('mcStart').hidden = playing; document.getElementById('mcPause').hidden = !playing;
     if (!live) { hidePlay(); notPlayingSince = null; return; }
     if (engine().isPassive()) { showPlay('Another player is driving this show. Take over here'); return; }
@@ -237,8 +239,11 @@
   };
 
   document.getElementById('mcPlayBig').addEventListener('click', () => { hidePlay(); engine().isPassive() ? engine().takeover() : engine().play(); });
-  document.getElementById('mcStart').addEventListener('click', () => { engine().isPassive() ? engine().takeover() : engine().play(); });
-  document.getElementById('mcPause').addEventListener('click', () => engine().pause());
+  // Swap Play/Pause the moment one is pressed. Waiting for the 1.5 s watchdog left Pause on screen after pausing,
+  // so a quick second press landed on it again.
+  const afterPress = () => watchdog(JayDee.getState());
+  document.getElementById('mcStart').addEventListener('click', async () => { await (engine().isPassive() ? engine().takeover() : engine().play()); afterPress(); });
+  document.getElementById('mcPause').addEventListener('click', () => { engine().pause(); afterPress(); });
   document.getElementById('mcSkip').addEventListener('click', () => engine().next());
   document.getElementById('mcSkipAlbum').addEventListener('click', async () => {
     try {
@@ -256,7 +261,7 @@
   document.getElementById('mcStop').addEventListener('click', async () => { engine().stop(); await api.stop(); present(null); });
   document.addEventListener('keydown', (e) => {
     if (document.body.dataset.mode !== 'mc' || e.target.matches('input, textarea')) return;
-    if (e.code === 'Space') { e.preventDefault(); engine().isPlaying() ? engine().pause() : engine().play(); }
+    if (e.code === 'Space') { e.preventDefault(); if (engine().isPlaying()) { engine().pause(); afterPress(); } else engine().play().then(afterPress); }
     else if (e.key === 'n' || e.key === 'N') engine().next();
     else if (e.key === 'p' || e.key === 'P') engine().play();
   });

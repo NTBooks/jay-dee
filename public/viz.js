@@ -5,11 +5,13 @@ JayDee.viz = (() => {
   let canvas, ctx, off, offCtx, raf = null, running = false;
   let getAnalyser = () => null;
   let isPlaying = () => true;
-  let idleSince = null;
   let freq = null, wave = null;
   let palette = [[127, 214, 164], [245, 196, 107], [120, 140, 255], [255, 120, 160]];
   let artToggle = false, currentArt = null, artImg = null, artAlpha = 0;
-  let t0 = performance.now();
+  // Motion eases instead of cutting: a pause glides the picture to a stop (then the loop sleeps and costs nothing),
+  // play spins it back up. The target is read fresh every frame, so a press mid-glide just turns it round.
+  const TAU_UP = 0.35, TAU_DOWN = 0.6; // seconds
+  let speed = 0, simT = 0, lastNow = null;
   let beatEnv = 0, lastBeat = 0, hue = 0;
   const STRIPS = 28;
   const blobs = Array.from({ length: 5 }, (_, i) => ({ fx: 0.09 + i * 0.031, fy: 0.071 + i * 0.027, px: i * 1.7, py: i * 0.9, band: i % 4 }));
@@ -43,35 +45,41 @@ JayDee.viz = (() => {
   const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 
   function frame(now) {
+    raf = null;
     if (!running) return;
-    // sleep while nothing is playing (after a short fade) or the tab is hidden; wake via the 1 s check below
-    // sleep when the tab is hidden, the canvas is not on screen (other mode), or nothing is playing
-    const visible = !!canvas.offsetParent;
-    if (document.hidden || !visible || !isPlaying()) { idleSince ??= now; if (!visible || now - idleSince > 2500) { raf = null; return; } } else idleSince = null;
+    // Off screen (hidden tab, or the other mode): nobody would see a glide, so stop dead and spin up from rest on return.
+    if (document.hidden || !canvas.offsetParent) { speed = 0; lastNow = null; return; }
+    const dt = lastNow == null ? 1 / 60 : Math.min(0.05, (now - lastNow) / 1000);
+    lastNow = now;
+    const want = isPlaying() ? 1 : 0;
+    speed += (want - speed) * (1 - Math.exp(-dt / (want > speed ? TAU_UP : TAU_DOWN)));
+    if (want === 0 && speed < 0.02) { speed = 0; lastNow = null; return; } // at rest: sleep until kick()
     raf = requestAnimationFrame(frame);
     const w = canvas.width, h = canvas.height;
-    const t = (now - t0) / 1000;
+    simT += dt * speed;
+    const t = simT;
     const sp = audio() || fakeAudio(t);
-    const bassHit = sp.bass > 0.58 && now - lastBeat > 240;
+    const bassHit = speed > 0.5 && sp.bass > 0.58 && now - lastBeat > 240;
     if (bassHit) { lastBeat = now; beatEnv = 1; }
     beatEnv *= 0.92;
-    hue = (hue + 0.25 + sp.high * 1.5) % 360;
+    hue = (hue + (0.25 + sp.high * 1.5) * speed) % 360;
 
     // 1. feedback: previous frame -> wave-warped strips, zoomed + rotated, slight fade + hue drift
     offCtx.globalCompositeOperation = 'source-over';
     offCtx.clearRect(0, 0, w, h);
-    try { offCtx.filter = `hue-rotate(${(0.4 + sp.mid * 2.5).toFixed(2)}deg)`; } catch {}
+    try { offCtx.filter = `hue-rotate(${((0.4 + sp.mid * 2.5) * speed).toFixed(2)}deg)`; } catch {}
     offCtx.drawImage(canvas, 0, 0);
     offCtx.filter = 'none';
     ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, w, h);
     ctx.save();
     ctx.translate(w / 2, h / 2);
-    const zoom = 1.012 + sp.bass * 0.02 + beatEnv * 0.015;
-    ctx.rotate(Math.sin(t * 0.11) * 0.006 + 0.002);
+    // every per-frame change scales with speed, so at rest a frame redraws the last one unchanged
+    const zoom = 1 + (0.012 + sp.bass * 0.02 + beatEnv * 0.015) * speed;
+    ctx.rotate((Math.sin(t * 0.11) * 0.006 + 0.002) * speed);
     ctx.scale(zoom, zoom);
-    ctx.globalAlpha = 0.90 + sp.bass * 0.04; // decay: trails live ~1-2 s, longer on loud passages
-    const amp = 2 + sp.bass * 9 + beatEnv * 6;
+    ctx.globalAlpha = 1 - (0.10 - sp.bass * 0.04) * speed; // decay: trails live ~1-2 s, longer on loud passages
+    const amp = (2 + sp.bass * 9 + beatEnv * 6) * speed;
     const sh = h / STRIPS;
     for (let i = 0; i < STRIPS; i++) {
       const y = i * sh;
@@ -83,7 +91,7 @@ JayDee.viz = (() => {
     // 2. bleed the album art into the feedback buffer so the cover itself gets swirled
     if (artImg && artImg.complete && artImg.naturalWidth) {
       artAlpha = Math.min(artAlpha + 0.001, 0.02);
-      ctx.globalAlpha = artAlpha;
+      ctx.globalAlpha = artAlpha * speed;
       ctx.globalCompositeOperation = 'lighter';
       const s = Math.max(w / artImg.naturalWidth, h / artImg.naturalHeight) * (1.1 + Math.sin(t * 0.23) * 0.08);
       const dw = artImg.naturalWidth * s, dh = artImg.naturalHeight * s;
@@ -96,7 +104,7 @@ JayDee.viz = (() => {
     const wv = sp.wave;
     if (wv && wv.length) {
       const c = palette[Math.floor(hue / 90) % palette.length];
-      ctx.strokeStyle = rgba(c, 0.45 + sp.mid * 0.3);
+      ctx.strokeStyle = rgba(c, (0.45 + sp.mid * 0.3) * speed);
       ctx.lineWidth = 1.4 + sp.bass * 1.5;
       ctx.beginPath();
       const step = Math.max(1, Math.floor(wv.length / w));
@@ -118,7 +126,7 @@ JayDee.viz = (() => {
       const r = Math.max(10, (0.12 + e * 0.3 + beatEnv * 0.08) * Math.min(w, h));
       const c = palette[i % palette.length];
       const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, rgba(c, 0.05 + e * 0.14));
+      g.addColorStop(0, rgba(c, (0.05 + e * 0.14) * speed));
       g.addColorStop(1, rgba(c, 0));
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
@@ -132,7 +140,7 @@ JayDee.viz = (() => {
     }
     if (freq) {
       const c = palette[(Math.floor(hue / 90) + 1) % palette.length];
-      ctx.strokeStyle = rgba(c, 0.16); ctx.lineWidth = 1;
+      ctx.strokeStyle = rgba(c, 0.16 * speed); ctx.lineWidth = 1;
       const bars = 48, base = Math.min(w, h) * 0.08, cx = w / 2 + Math.sin(t * 0.13) * w * 0.15, cy = h / 2 + Math.cos(t * 0.1) * h * 0.15;
       ctx.beginPath();
       for (let i = 0; i < bars; i++) {
@@ -187,6 +195,12 @@ JayDee.viz = (() => {
     img.src = url;
   }
 
+  // Start (or resume) the loop if there is anything to animate. Cheap to call often: the player calls it on every
+  // play/pause, and a one-second check backs that up for changes nobody reports (an audio context resuming).
+  function kick() {
+    if (running && !raf && canvas && !document.hidden && canvas.offsetParent && (isPlaying() || speed > 0)) raf = requestAnimationFrame(frame);
+  }
+  document.addEventListener('visibilitychange', kick);
   let waker = null;
   function start(canvasEl, analyserGetter, playingGetter) {
     canvas = canvasEl; ctx = canvas.getContext('2d');
@@ -196,15 +210,16 @@ JayDee.viz = (() => {
     resize();
     window.addEventListener('resize', resize);
     running = true;
-    if (!raf) raf = requestAnimationFrame(frame);
+    kick();
     clearInterval(waker);
-    waker = setInterval(() => { if (running && !raf && !document.hidden && canvas.offsetParent && isPlaying()) { idleSince = null; raf = requestAnimationFrame(frame); } }, 1000);
+    waker = setInterval(kick, 1000);
   }
   function stop() {
     running = false;
     if (raf) cancelAnimationFrame(raf); raf = null;
+    speed = 0; lastNow = null;
     clearInterval(waker); waker = null;
     window.removeEventListener('resize', resize);
   }
-  return { start, stop, setArt, setAnalyser: (g) => { getAnalyser = g; } };
+  return { start, stop, kick, setArt, setAnalyser: (g) => { getAnalyser = g; } };
 })();

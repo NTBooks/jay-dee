@@ -29,11 +29,21 @@
     positionRoot();
     window.addEventListener('resize', positionRoot);
     installMediaSession();
+    // Wake the visualizer the moment playback starts or stops, not at its next one-second check.
+    let lastStatus = null;
+    webamp.store.subscribe(() => { const s = mediaStatus(); if (s !== lastStatus) { lastStatus = s; JayDee.viz.kick(); } });
     webamp.onTrackDidChange((track) => {
-      const next = track ? itemFromUrl(track.url) : null;
-      if (next === playingItem) return;
+      // Webamp reports null whenever it is not playing (every pause, between tracks, while a file loads), not only
+      // when the show runs out. Reading that as "the track ended" made each pause advance the server: the track was
+      // marked played and the next promoted, then the resume closed that one out too, so rapid play/pause burned
+      // through the queue and set off refills. Only a real track starting moves the show.
+      if (!track) return;
+      const next = itemFromUrl(track.url);
+      if (next === playingItem) return; // resumed after a pause
       // Safety net: an entry the server replaced (call-in) that somehow survived pruning is skipped.
       if (next && !inPlaylist.has(next)) { try { webamp.nextTrack(); } catch {} return; }
+      // Watching someone else's show: stay silent rather than race the driver. The take-over button is the way in.
+      if (passive) { pauseIfPlaying(); return; }
       const prev = playingItem;
       playingItem = next;
       let shuffle = false; try { shuffle = !!webamp.store.getState().media.shuffle; } catch {}
@@ -101,34 +111,56 @@
   document.getElementById('rfbDown').addEventListener('click', () => { clearTimeout(rDownTimer); rDownTimer = setTimeout(() => { const fb = currentTrackForFb?.feedback || {}; rFeedback(fb.artist_blocked ? 'unblock_artist' : fb.track === 'down' ? 'clear' : 'down'); }, 260); });
   document.getElementById('rfbDown').addEventListener('dblclick', () => { clearTimeout(rDownTimer); rFeedback(currentTrackForFb?.feedback?.artist_blocked ? 'unblock_artist' : 'block_artist'); });
   let passive = false, takeoverNext = false;
+  let transportSeq = 0; // bumped by every play/pause/stop press, so a slow play that lost the race stands down
   // Hold the show while playing. The claim goes stale after 90s server-side, and tracks are longer than that, so
   // without a refresh a second player would find the role free mid-track and start a competing copy.
   setInterval(() => {
     if (passive || disposed || !JayDee.engine?.isPlaying()) return;
     api.control().catch((e) => { if (e.controller) goPassive(e.state); });
   }, 30_000);
+  // Webamp's pause() is a toggle (it plays when nothing is playing) and play() rewinds a track that is already
+  // playing. Every caller here means one or the other, so ask for exactly that. goPassive used the toggle: a player
+  // refused the driver role paused, the pause was reported and refused, it "paused" again (which played), and that
+  // went round as fast as the server could answer: the voice chopping as if rapidly paused and unpaused.
+  const mediaStatus = () => { try { return webamp.store.getState().media.status; } catch { return null; } };
+  function pauseIfPlaying() { if (mediaStatus() === 'PLAYING') { try { webamp.pause(); } catch {} } }
   function goPassive(state) {
     passive = true;
-    try { webamp.pause(); } catch {}
+    pauseIfPlaying();
     const st = document.getElementById('status'); st.textContent = 'another player is driving this show'; st.className = 'status busy';
     document.getElementById('takeover').hidden = false;
   }
   async function syncPlaylist(state) {
     if (!state?.session || disposed) return;
+    if (state.session.id !== engineSession) newShow(state);
     // Someone else holds the show: stop before playing over them, rather than finding out at the next advance.
     if (!passive && !JayDee.isDriver(state) && JayDee.engine?.isPlaying()) { goPassive(state); return; }
     if (passive) return; // watching only until the user takes over
     try { await syncPlaylistInner(state); } catch (e) { console.error('syncPlaylist failed', e); }
   }
   let engineSession = null;
+  let startOnLoad = false; // does the next show loaded into the engine start playing, or wait cued for play?
+  // A different session than the one loaded in the engine (new theme, saved set, replaced show): wipe the deck,
+  // whichever mode asked for it. Otherwise old tracks keep playing against a queue the server has retired.
+  function newShow(state) {
+    const pageLoad = engineSession === null;
+    // Every open player loads the new show, but it only starts where someone is listening: the player that was
+    // playing the old one, the one whose Go asked for it, or on a reload the one the server says is driving.
+    // Starting it everywhere put several players on the same opener, and all but one were refused by the server.
+    const listening = pageLoad ? state.controller?.clientId === JayDee.clientId : (!passive && JayDee.engine.isPlaying());
+    startOnLoad = startOnLoad || listening || JayDee.takePlayIntent();
+    if (!pageLoad) { passive = false; takeoverNext = false; document.getElementById('takeover').hidden = true; }
+    engineSession = state.session.id;
+    inPlaylist.clear(); playingItem = null;
+    try { webamp.stop(); webamp.setTracksToPlay([]); } catch {}
+  }
+  // Put a show in the playlist with its first item cued but silent, for a player that should wait for play.
+  function loadCued(tracks) {
+    webamp.appendTracks(tracks);
+    const first = webamp.store.getState().playlist.trackOrder[0];
+    if (first != null) webamp.store.dispatch({ type: 'BUFFER_TRACK', id: first });
+  }
   async function syncPlaylistInner(state) {
-    // A different session than the one loaded in the engine (new theme, saved set, replaced show): wipe the deck,
-    // whichever mode asked for it. Otherwise old tracks keep playing against a queue the server has retired.
-    if (state.session.id !== engineSession) {
-      engineSession = state.session.id;
-      inPlaylist.clear(); playingItem = null;
-      try { webamp.setTracksToPlay([]); } catch {}
-    }
     const q = await api.queue();
     const first = inPlaylist.size === 0;
     // On first load also (re)start whatever the server thinks is playing, so a page reload resumes the set.
@@ -136,9 +168,16 @@
     if (!fresh.length) return;
     fresh.forEach((it) => inPlaylist.add(it.id));
     // First batch: load + start (setTracksToPlay loads track 1; if autoplay is blocked the user presses Play).
-    if (first) { webamp.setTracksToPlay(fresh.map(toTrack)); return; }
+    if (first) {
+      if (startOnLoad) webamp.setTracksToPlay(fresh.map(toTrack)); else loadCued(fresh.map(toTrack));
+      startOnLoad = false;
+      return;
+    }
     const st = webamp.store.getState();
-    const atEnd = st.media.status !== 'PLAYING' && (st.playlist.currentTrack == null || st.playlist.trackOrder.indexOf(st.playlist.currentTrack) === st.playlist.trackOrder.length - 1);
+    // Ran off the end while the DJ was refilling: Webamp says ENDED (or STOPPED) after actually playing something. A
+    // listener who paused on the last track is PAUSED and stays paused; rolling them on into the refill was another
+    // pause that skipped.
+    const atEnd = (st.media.status === 'ENDED' || st.media.status === 'STOPPED') && playingItem != null && (st.playlist.currentTrack == null || st.playlist.trackOrder.indexOf(st.playlist.currentTrack) === st.playlist.trackOrder.length - 1);
     webamp.appendTracks(fresh.map(toTrack));
     // Radio never stops: if Webamp had run off the end of its playlist while the DJ was refilling, roll straight on.
     if (atEnd) { try { webamp.nextTrack(); webamp.play(); } catch (e) { console.warn('auto-continue failed', e); } }
@@ -208,7 +247,7 @@
   });
   document.getElementById('savedSets').addEventListener('click', async (e) => {
     const p = e.target.closest('[data-play]'), d = e.target.closest('[data-del]');
-    if (p) { await api.playSet(p.dataset.play); JayDee.setStatus('loading saved set…', 'busy'); }
+    if (p) { JayDee.requestPlay(); await api.playSet(p.dataset.play); JayDee.setStatus('loading saved set…', 'busy'); }
     if (d) { await api.deleteSet(d.dataset.del); renderSets(); }
   });
   renderSets();
@@ -219,25 +258,25 @@
   JayDee.engine = {
     ensure: ensureWebamp,
     play: async () => {
+      // Each press supersedes the one before. Claiming the show is a round trip, and a pause pressed while it was out
+      // used to be undone when the claim came back and playback started anyway.
+      const press = ++transportSeq;
       try {
-        // Claim the show before making a sound. Without this a second player runs its own copy of the same queue
-        // until the next advance: two systems play the same track and the same voice break a moment apart, which
-        // in one room comb-filters into something slurred and distorted rather than sounding like two players.
+        // Claim the show before making a sound, so a second player cannot run its own copy of the queue.
         try { await api.control(); }
-        catch (e) { if (e.controller) { await ensureWebamp(); goPassive(e.state); return; } }
+        catch (e) { if (e.controller) { await ensureWebamp(); if (press === transportSeq) goPassive(e.state); return; } }
         await ensureWebamp();
-        const st = webamp.store.getState();
-        if (!st.playlist.trackOrder.length) { inPlaylist.clear(); playingItem = null; await syncPlaylist(JayDee.getState()); }
-        else webamp.play();
+        if (press !== transportSeq) return;
+        if (!webamp.store.getState().playlist.trackOrder.length) { inPlaylist.clear(); playingItem = null; startOnLoad = true; await syncPlaylist(JayDee.getState()); }
         // if the browser kept the audio context suspended (mounted before any click), resume it now under this gesture
         try { const ctx = webamp.media?._context; if (ctx && ctx.state === 'suspended') await ctx.resume(); } catch {}
-        const st2 = webamp.store.getState();
-        if (st2.media.status !== 'PLAYING') webamp.play();
+        if (press !== transportSeq) return;
+        if (mediaStatus() !== 'PLAYING') webamp.play();
       } catch (e) { console.error('engine.play failed', e); }
     },
-    pause: () => { try { webamp.pause(); } catch {} },
+    pause: () => { transportSeq++; pauseIfPlaying(); },
     next: () => { try { webamp.nextTrack(); } catch {} },
-    stop: () => { try { webamp.stop(); } catch {} },
+    stop: () => { transportSeq++; try { webamp.stop(); } catch {} },
     // "playing" only counts when the browser's audio context is actually running; a suspended context is silence
     isPlaying: () => { try { const ctx = webamp.media?._context; return !disposed && webamp.store.getState().media.status === 'PLAYING' && !(ctx && ctx.state === 'suspended'); } catch { return false; } },
     audioBlocked: () => { try { const ctx = webamp.media?._context; return !!(ctx && ctx.state === 'suspended'); } catch { return false; } },
@@ -248,7 +287,7 @@
     takeover: () => {
       passive = false; takeoverNext = true;
       document.getElementById('takeover').hidden = true;
-      inPlaylist.clear(); playingItem = null;
+      inPlaylist.clear(); playingItem = null; startOnLoad = true;
       // Take the role now, so the player we are taking it from goes passive on its next poll instead of both
       // playing until whichever one finishes an item first.
       api.control(true).catch(() => {});

@@ -374,7 +374,8 @@ window.JayDee = (() => {
       setStatus('asking the DJ…', 'busy');
       boothHiddenBy = null; boothDoneAt = null;
       const albumMode = !!document.getElementById('albumMode')?.checked;
-      try { await api.theme(theme, 10, albumMode ? 'albums' : 'tracks'); modes[current]?.onNewSession?.(); } catch (err) { setStatus(err.message, 'error'); }
+      requestPlay(); // before the request: the poll that sees the new show can come back before this does
+      try { await api.theme(theme, 10, albumMode ? 'albums' : 'tracks'); modes[current]?.onNewSession?.(); } catch (err) { playIntentAt = 0; setStatus(err.message, 'error'); }
       poll();
     });
     document.getElementById('cost').addEventListener('click', () => { const p = document.getElementById('costPanel'); p.hidden = !p.hidden; });
@@ -395,7 +396,13 @@ window.JayDee = (() => {
   const fmt = (s) => (s ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}` : '');
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+  // "Start the next show here": set by the player whose Go (or saved set) asked for it, used up when the show loads.
+  // Every other open player loads the new show cued and silent.
+  let playIntentAt = 0;
+  function requestPlay() { playIntentAt = Date.now(); }
+  function takePlayIntent() { const on = Date.now() - playIntentAt < 180_000; playIntentAt = 0; return on; }
+
   const isDriver = (state) => !state?.controller || state.controller.clientId === clientId || state.controller.idleMs > 90_000;
   const emitTrackChange = (state) => { if (state) lastState = state; for (const fn of trackListeners) { try { fn(lastState); } catch (e) { console.error(e); } } };
-  return { api, modes, boot, switchMode, onState: (fn) => listeners.add(fn), onTrackChange: (fn) => trackListeners.add(fn), emitTrackChange, getState: () => lastState, setStatus, fmt, esc, clientId, isDriver };
+  return { api, modes, boot, switchMode, onState: (fn) => listeners.add(fn), onTrackChange: (fn) => trackListeners.add(fn), emitTrackChange, getState: () => lastState, setStatus, fmt, esc, clientId, isDriver, requestPlay, takePlayIntent };
 })();
