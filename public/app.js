@@ -250,7 +250,7 @@ window.JayDee = (() => {
 
   async function doRestore() {
     if (!picked || !checked) return;
-    if (!confirm('Replace the catalog this station is serving?\n\nThe current database is kept on the server and listed under "Kept databases", so you can roll back. Any show playing right now will stop.')) return;
+    if (!confirm('Replace the catalog this station is serving?\n\nThe current database is kept on the server and listed under "Kept databases", so you can roll back. This station keeps its own play history, shows, saved sets and feedback, and the show on air keeps playing.')) return;
     dbUi.restore.disabled = true;
     dbUi.msg.textContent = ''; dbUi.msg.className = 'dbMsg';
     try {
@@ -260,7 +260,8 @@ window.JayDee = (() => {
       dbUi.fileInput.value = '';
       setBar(1, 'done');
       dbUi.msg.className = 'dbMsg ok';
-      dbUi.msg.textContent = `Catalog replaced: ${countLine(out.after)}.${out.backup ? ` Previous database kept as ${out.backup}.` : ''}`;
+      const kept = out.station_data?.source === 'kept' ? ` Kept this station's play history (${(out.station_data.rows.dj_log || 0).toLocaleString()} plays).` : '';
+      dbUi.msg.textContent = `Catalog replaced: ${countLine(out.after)}.${kept}${out.backup ? ` Previous database kept as ${out.backup}.` : ''}`;
       await refreshDb();
       poll();
     } catch (e) {

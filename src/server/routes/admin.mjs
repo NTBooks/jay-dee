@@ -81,7 +81,9 @@ export function adminRoutes({ station }) {
         return res.json({ dry_run: true, ok: true, upload: info, current: summarize(openDb()) });
       }
       const keepBackup = req.query.keep_backup !== '0';
-      const out = restoreFrom(staged, { station, keepBackup });
+      // ?station_data=upload takes the upload's shows and play history instead of keeping this server's.
+      const stationData = req.query.station_data === 'upload' ? 'upload' : 'keep';
+      const out = restoreFrom(staged, { station, keepBackup, stationData });
       return res.json({ ok: true, ...out });
     } catch (e) {
       log.warn(`restore rejected: ${e.message}`);

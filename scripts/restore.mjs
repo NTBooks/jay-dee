@@ -7,6 +7,8 @@
 //   node scripts/restore.mjs status                   what the local database holds
 //   node scripts/restore.mjs list                     databases kept by previous restores
 //   node scripts/restore.mjs snapshot [out.sqlite]    consistent copy of the live database
+// apply and push keep the station's own shows, play history, voice breaks, saved sets and feedback;
+// add --station-data=upload to take the file's instead.
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../src/config.mjs';
@@ -15,6 +17,7 @@ import { inspect, restoreFrom, listBackups, snapshot, summarize, statOf } from '
 
 const [cmd, arg, arg2] = process.argv.slice(2);
 const show = (o) => console.log(JSON.stringify(o, null, 1));
+const stationData = process.argv.includes('--station-data=upload') ? 'upload' : 'keep';
 const need = (what) => { if (!arg) { console.error(`usage: node scripts/restore.mjs ${cmd} <${what}>`); process.exit(1); } };
 
 try {
@@ -29,7 +32,7 @@ try {
     const staged = path.join(config.dataDir, `restore-cli-${Date.now()}.sqlite`);
     fs.mkdirSync(config.dataDir, { recursive: true });
     fs.copyFileSync(src, staged);
-    try { show(restoreFrom(staged)); }
+    try { show(restoreFrom(staged, { stationData })); }
     finally { fs.rmSync(staged, { force: true }); }
   } else if (cmd === 'push') {
     need('file.sqlite');
@@ -38,7 +41,8 @@ try {
     const info = inspect(file); // fail locally before sending hundreds of megabytes
     const dry = process.argv.includes('--dry-run');
     const base = arg2.replace(/\/+$/, '');
-    const url = `${base}/api/admin/restore${dry ? '?dry_run=1' : ''}`;
+    const query = [dry && 'dry_run=1', stationData === 'upload' && 'station_data=upload'].filter(Boolean).join('&');
+    const url = `${base}/api/admin/restore${query ? `?${query}` : ''}`;
     // Credentials come from the environment so they never end up in shell history: STATION_USER / STATION_PASSWORD.
     const headers = { 'content-type': 'application/octet-stream', 'content-length': String(info.bytes) };
     if (config.station.password) headers.authorization = `Basic ${Buffer.from(`${config.station.user}:${config.station.password}`).toString('base64')}`;

@@ -14,6 +14,10 @@ import { log } from '../util/log.mjs';
 const SQLITE_MAGIC = Buffer.from('SQLite format 3\0', 'latin1');
 // Tables the station cannot run without. A file missing any of these is not a Jay Dee catalog.
 const REQUIRED = ['schema_version', 'artists', 'albums', 'tracks', 'research', 'embeddings'];
+// Tables the station itself writes. The workstation owns the catalog, the server owns these: play history (which the
+// DJ reads to avoid repeats), shows, voice breaks cached on this volume, saved sets and feedback. A restore takes the
+// catalog from the upload and keeps these from the database it replaces.
+export const STATION_TABLES = ['dj_sessions', 'dj_queue', 'dj_calls', 'dj_log', 'patter', 'saved_sets', 'feedback'];
 
 export const stagingDir = () => path.join(config.dataDir, 'restore');
 export const backupsDir = () => path.join(config.dataDir, 'backups');
@@ -61,9 +65,38 @@ export function inspect(file) {
   } finally { db.close(); }
 }
 
-// Swap `file` in as the live database. Returns { restored, backup, before, after }.
+// Copy the station tables of `prevFile` over the ones in `db` (the freshly swapped-in upload), all or nothing.
+// A database that has never served a show (a fresh server's empty one) has nothing worth keeping, so then the
+// upload's own history stays. Returns { source: 'kept' | 'upload', rows }.
+function carryStationData(db, prevFile) {
+  db.prepare('ATTACH DATABASE ? AS prev').run(prevFile);
+  try {
+    const inPrev = new Set(db.prepare("SELECT name FROM prev.sqlite_master WHERE type='table'").all().map((r) => r.name));
+    const tables = STATION_TABLES.filter((t) => inPrev.has(t));
+    const total = tables.reduce((s, t) => s + db.prepare(`SELECT COUNT(*) n FROM prev.${t}`).get().n, 0);
+    if (!total) return { source: 'upload', rows: {} };
+    const cols = (schema, t) => db.prepare(`PRAGMA ${schema}.table_info(${t})`).all().map((c) => c.name);
+    const rows = {};
+    db.transaction(() => {
+      for (const t of STATION_TABLES) db.prepare(`DELETE FROM main.${t}`).run();
+      for (const t of tables) {
+        // Only the columns both sides have: either file may predate an additive migration.
+        const prevCols = new Set(cols('prev', t));
+        const list = cols('main', t).filter((c) => prevCols.has(c)).map((c) => `"${c}"`).join(', ');
+        rows[t] = db.prepare(`INSERT INTO main.${t} (${list}) SELECT ${list} FROM prev.${t}`).run().changes;
+      }
+    })();
+    return { source: 'kept', rows };
+  } finally {
+    db.prepare('DETACH DATABASE prev').run();
+  }
+}
+
+// Swap `file` in as the live database. Returns { restored, backup, before, after, station_data }.
 // The database being replaced is renamed aside first, so a failure at any point can put it back.
-export function restoreFrom(file, { station = null, keepBackup = true } = {}) {
+// stationData: 'keep' (default) keeps this server's shows, play history, voice breaks, saved sets and feedback;
+// 'upload' takes the uploaded file's instead.
+export function restoreFrom(file, { station = null, keepBackup = true, stationData = 'keep' } = {}) {
   const info = inspect(file); // throws before anything is touched
   const dbPath = config.dbPath;
   const before = (() => { try { return summarize(openDb()); } catch { return null; } })();
@@ -88,15 +121,28 @@ export function restoreFrom(file, { station = null, keepBackup = true } = {}) {
   }
 
   // openDb() applies schema.sql and the additive migrations, so an older workstation database is brought forward.
-  const db = openDb();
+  let db = openDb();
+  let stationResult = { source: 'upload', rows: {} };
+  if (movedAside && stationData !== 'upload') {
+    try { stationResult = carryStationData(db, backup); }
+    catch (e) {
+      // Publishing must never quietly cost the server its history: undo the whole swap instead.
+      closeDb();
+      try { fs.rmSync(dbPath, { force: true }); rmSidecars(dbPath); fs.renameSync(backup, dbPath); } catch { /* nothing else to try */ }
+      openDb();
+      throw new Error(`could not keep this station's play history and shows, original database left in place: ${e.message}`);
+    }
+  }
   invalidateVectorCache();
-  station?.reset?.();
+  // With the station's own tables kept, the show on air still refers to real rows and keeps playing.
+  station?.reset?.({ keepShow: stationResult.source === 'kept' });
   const after = summarize(db);
 
   if (!keepBackup && movedAside) fs.rmSync(backup, { force: true });
   pruneBackups();
-  log.info(`database restored (${info.mb} MB, ${after.tracks} tracks); previous database kept at ${movedAside && keepBackup ? backup : 'discarded'}`);
-  return { restored: info, backup: movedAside && keepBackup ? path.basename(backup) : null, before, after };
+  const kept = stationResult.source === 'kept' ? `kept this station's DJ data (${stationResult.rows.dj_log ?? 0} plays)` : "took the upload's DJ data";
+  log.info(`database restored (${info.mb} MB, ${after.tracks} tracks), ${kept}; previous database kept at ${movedAside && keepBackup ? backup : 'discarded'}`);
+  return { restored: info, backup: movedAside && keepBackup ? path.basename(backup) : null, before, after, station_data: stationResult };
 }
 
 export function summarize(db) {

@@ -19,9 +19,9 @@ npm run pack
 ```
 
 That checkpoints the SQLite WAL and writes `jaydee-data.tar.gz` containing `jaydee.sqlite`, `taste/`, `tts/`
-and `art/`. Re-run and re-upload whenever you have researched more of the library; the server never writes to
-the catalog tables, only to the DJ tables (sessions, queue, feedback, saved sets, spend log), so copying the
-workstation database over the server one loses those. If that matters, save sets on the workstation instead.
+and `art/`. This is for the first load; after that, publish new research through the Catalog panel (below), which
+keeps the server's own DJ data. Untarring over the volume does not: it replaces the server's shows, play history,
+saved sets and feedback with the workstation's.
 
 ## 2. Create the app in Coolify
 
@@ -122,10 +122,12 @@ request; the container needs outbound HTTPS to huggingface.co for that.
 have done is research more of the library, the Catalog panel is the whole update — and it keeps the database it
 replaced, which untarring over the volume does not.
 
-Either way the server's own DJ tables (sessions, saved sets, feedback, spend log) live in the same file as the
-catalog, so publishing a workstation database replaces them. **Download this one** in the Catalog panel takes a
-consistent copy of what the server is serving before you overwrite it; save sets on the workstation if you want to
-keep them permanently.
+The server's own DJ tables (shows and their queues, play history, voice breaks, call-ins, saved sets, feedback) live
+in the same file as the catalog, but they belong to the server: a restore or publish takes the catalog from the upload
+and copies those tables over from the database it replaces, so the DJ still knows what it played recently and the show
+on air keeps going. A server that has never played anything keeps the upload's instead. To take the upload's on
+purpose, add `?station_data=upload` to the restore request or `--station-data=upload` to `restore apply|push`. The
+spend log is a file next to the database and is never touched.
 
 ## 4. Check
 

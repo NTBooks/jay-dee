@@ -18,11 +18,17 @@ export class Station {
     this.db.prepare("UPDATE dj_sessions SET status='failed', error='server restarted while planning', ended_at=? WHERE status='planning'").run(nowIso());
   }
 
-  // After the database underneath us is replaced, nothing in memory refers to anything real any more: the session
-  // being planned, the progress log and the driving client all belong to the old catalog's row ids.
-  reset() {
-    this.planning = null; this.progress = []; this.controller = null;
+  // After the database underneath us is replaced, the session being planned and its progress log are gone. When the
+  // restore kept this station's own tables (keepShow), the show on air is still real and keeps its driving client;
+  // otherwise nothing in memory refers to anything real any more and every open show ends.
+  reset({ keepShow = false } = {}) {
+    this.planning = null; this.progress = [];
     this.db.prepare("UPDATE dj_sessions SET status='playing' WHERE status='refilling'").run();
+    if (keepShow) {
+      this.db.prepare("UPDATE dj_sessions SET status='failed', error='database restored while planning', ended_at=? WHERE status='planning'").run(nowIso());
+      return;
+    }
+    this.controller = null;
     this.db.prepare("UPDATE dj_sessions SET status='failed', error='database restored', ended_at=? WHERE status IN ('planning','ready','playing')").run(nowIso());
   }
 
